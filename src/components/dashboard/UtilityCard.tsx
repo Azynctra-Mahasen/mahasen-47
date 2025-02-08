@@ -1,6 +1,8 @@
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LucideIcon } from "lucide-react";
+import { ShineBorder } from "@/components/magicui/shine-border";
 
 interface UtilityCardProps {
   icon: LucideIcon;
@@ -10,6 +12,7 @@ interface UtilityCardProps {
   onClick: () => void;
   colorClass: string;
   bgColorClass: string;
+  useShine?: boolean;
 }
 
 export const UtilityCard = ({
@@ -20,9 +23,10 @@ export const UtilityCard = ({
   onClick,
   colorClass,
   bgColorClass,
+  useShine = false,
 }: UtilityCardProps) => {
-  return (
-    <Card className="p-6 cursor-pointer transition-all duration-200 hover:shadow-lg border-2 border-transparent dark:bg-slate-900">
+  const content = (
+    <Card className="w-full p-6 cursor-pointer transition-all duration-200 hover:shadow-lg border-2 border-transparent dark:bg-slate-900">
       <div className={`rounded-full w-12 h-12 ${bgColorClass} ${colorClass} flex items-center justify-center mb-4`}>
         <Icon className="h-6 w-6" />
       </div>
@@ -37,4 +41,16 @@ export const UtilityCard = ({
       </Button>
     </Card>
   );
+
+  if (useShine) {
+    return (
+      <div className="w-full">
+        <ShineBorder color={["#A07CFE", "#FE8FB5", "#FFBE7B"]}>
+          {content}
+        </ShineBorder>
+      </div>
+    );
+  }
+
+  return content;
 };

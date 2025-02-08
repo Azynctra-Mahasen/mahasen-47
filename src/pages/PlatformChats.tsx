@@ -1,111 +1,25 @@
+
 import { useParams, useNavigate } from "react-router-dom";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MessageSquare, CircleDot } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
-import { useEffect } from "react";
-
-type Platform = Database["public"]["Enums"]["platform_type"];
-const validPlatforms: Platform[] = ["whatsapp", "facebook", "instagram"];
-
-interface Conversation {
-  id: string;
-  contact_name: string;
-  contact_number: string;
-  updated_at: string;
-  platform: Platform;
-  has_unread: boolean;
-  latest_message_time: string;
-}
+import { useQueryClient } from "@tanstack/react-query";
+import { ConversationCard } from "@/components/platform-chats/ConversationCard";
+import { useConversations } from "@/hooks/useConversations";
+import { useMessageUpdates } from "@/hooks/useMessageUpdates";
+import { isValidPlatform } from "@/types/platform";
 
 const PlatformChats = () => {
   const { platform } = useParams<{ platform: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Validate if the platform is valid
-  const isValidPlatform = (p: string | undefined): p is Platform => {
-    return !!p && validPlatforms.includes(p as Platform);
-  };
-
   // Set up real-time subscription for message updates
-  useEffect(() => {
-    if (!isValidPlatform(platform)) return;
+  useMessageUpdates(isValidPlatform(platform) ? platform : undefined);
 
-    const channel = supabase
-      .channel('messages-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
-          schema: 'public',
-          table: 'messages',
-          filter: platform ? `platform=eq.${platform}` : undefined
-        },
-        () => {
-          // Immediately invalidate and refetch conversations
-          queryClient.invalidateQueries({ 
-            queryKey: ["conversations", platform],
-            exact: true
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log("Subscription status:", status);
-      });
-
-    return () => {
-      console.log("Cleaning up subscription");
-      supabase.removeChannel(channel);
-    };
-  }, [platform, queryClient]);
-
-  const { data: conversations, isLoading } = useQuery({
-    queryKey: ["conversations", platform],
-    queryFn: async () => {
-      if (!isValidPlatform(platform)) {
-        throw new Error("Invalid platform specified");
-      }
-
-      // Get conversations with their latest message timestamp
-      const { data: conversationsData, error: conversationsError } = await supabase
-        .from("conversations")
-        .select(`
-          *,
-          messages:messages (
-            created_at,
-            read
-          )
-        `)
-        .eq("platform", platform);
-
-      if (conversationsError) throw conversationsError;
-
-      // Process the conversations to include latest message time and unread status
-      const processedConversations = conversationsData.map(conversation => {
-        const messages = conversation.messages || [];
-        const latestMessage = messages.reduce((latest: any, current: any) => {
-          return !latest || new Date(current.created_at) > new Date(latest.created_at)
-            ? current
-            : latest;
-        }, null);
-
-        return {
-          ...conversation,
-          has_unread: messages.some((msg: any) => !msg.read && msg.status === 'received'),
-          latest_message_time: latestMessage ? latestMessage.created_at : conversation.created_at
-        };
-      });
-
-      // Sort by latest message time
-      return processedConversations.sort((a, b) => 
-        new Date(b.latest_message_time).getTime() - new Date(a.latest_message_time).getTime()
-      );
-    },
-    refetchOnWindowFocus: true,
-  });
+  const { data: conversations, isLoading } = useConversations(
+    isValidPlatform(platform) ? platform : undefined
+  );
 
   const handleChatClick = async (conversationId: string) => {
     try {
@@ -177,31 +91,11 @@ const PlatformChats = () => {
         ) : (
           <div className="grid gap-4">
             {conversations?.map((conversation) => (
-              <Card
+              <ConversationCard
                 key={conversation.id}
-                className="cursor-pointer hover:shadow-md transition-shadow bg-white dark:bg-slate-800"
+                {...conversation}
                 onClick={() => handleChatClick(conversation.id)}
-              >
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-lg font-semibold">
-                    {conversation.contact_name}
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    {conversation.has_unread && (
-                      <CircleDot className="h-4 w-4 text-green-500" />
-                    )}
-                    <div className="text-sm text-muted-foreground">
-                      {new Date(conversation.latest_message_time).toLocaleDateString()}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    {conversation.contact_number}
-                  </div>
-                </CardContent>
-              </Card>
+              />
             ))}
           </div>
         )}

@@ -1,6 +1,8 @@
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LucideIcon } from "lucide-react";
+import { ShineBorder } from "@/components/magicui/shine-border";
 
 interface PlatformCardProps {
   id: string;
@@ -12,6 +14,7 @@ interface PlatformCardProps {
   description: string;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  useShine?: boolean;
 }
 
 export const PlatformCard = ({
@@ -24,10 +27,11 @@ export const PlatformCard = ({
   description,
   isSelected,
   onSelect,
+  useShine = false,
 }: PlatformCardProps) => {
-  return (
+  const content = (
     <Card
-      className={`p-6 cursor-pointer transition-all duration-200 hover:shadow-lg border-2 ${
+      className={`w-full p-6 cursor-pointer transition-all duration-200 hover:shadow-lg border-2 ${
         isSelected ? borderColor : "border-transparent"
       } dark:bg-slate-900`}
       onClick={() => onSelect(id)}
@@ -46,4 +50,16 @@ export const PlatformCard = ({
       </Button>
     </Card>
   );
+
+  if (useShine) {
+    return (
+      <div className="w-full">
+        <ShineBorder color={["#A07CFE", "#FE8FB5", "#FFBE7B"]}>
+          {content}
+        </ShineBorder>
+      </div>
+    );
+  }
+
+  return content;
 };

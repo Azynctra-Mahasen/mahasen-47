@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -5,6 +6,7 @@ import { AddTicketDialog } from "@/components/tickets/AddTicketDialog";
 import { TicketList } from "@/components/tickets/TicketList";
 import { TicketHeader } from "@/components/tickets/TicketHeader";
 import { Ticket, TicketType, TicketPriority } from "@/types/ticket";
+import { useRealtimeTickets } from "@/components/tickets/useRealtimeTickets";
 
 const Tickets = () => {
   const navigate = useNavigate();
@@ -16,13 +18,16 @@ const Tickets = () => {
     direction: 'asc' 
   });
 
+  // Use our new real-time hook
+  useRealtimeTickets(setTickets, sortConfig);
+
   useEffect(() => {
     const fetchTickets = async () => {
       try {
         const { data, error } = await supabase
           .from("tickets")
           .select("*")
-          .neq('status', 'Completed') // Filter out completed tickets
+          .neq('status', 'Completed')
           .order('id', { ascending: true });
 
         if (error) throw error;
@@ -50,39 +55,17 @@ const Tickets = () => {
     };
 
     fetchTickets();
-
-    // Subscribe to changes in the tickets table
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tickets',
-          filter: 'status=neq.Completed'
-        },
-        () => {
-          // Refetch tickets when there are changes
-          fetchTickets();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         <TicketHeader 
           onBackClick={() => navigate("/dashboard")} 
           onAddClick={() => setDialogOpen(true)}
         />
 
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow">
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow overflow-hidden">
           <TicketList 
             tickets={tickets}
             loading={loading}

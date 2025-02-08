@@ -17,7 +17,7 @@ interface TicketPriorityProps {
 
 export const TicketPrioritySection = ({ priority, isUpdating, onPriorityChange }: TicketPriorityProps) => {
   return (
-    <div className="space-y-2 text-gray-700 dark:text-gray-400">
+    <div className="space-y-2 text-gray-600 dark:text-gray-300">
       <h4 className="font-medium ">Priority</h4>
       <div className="flex items-center gap-2 ">
         <Badge variant="secondary" className={priorityColors[priority]}>

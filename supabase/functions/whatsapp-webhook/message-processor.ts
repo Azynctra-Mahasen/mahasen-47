@@ -31,24 +31,48 @@ export async function processWhatsAppMessage(
       .eq("contact_number", userId)
       .single();
 
-    if (convError) {
+    if (convError && convError.code !== 'PGRST116') {
       console.error('Error fetching conversation:', convError);
       throw convError;
     }
 
+    let conversationId;
     if (!conversation) {
-      const error = new Error('No conversation found');
-      console.error('Error:', error);
-      throw error;
+      const { data: newConv, error: createError } = await supabase
+        .from("conversations")
+        .insert({
+          contact_number: userId,
+          contact_name: userName,
+          platform: 'whatsapp'
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      conversationId = newConv.id;
+    } else {
+      conversationId = conversation.id;
     }
 
-    console.log('Found conversation:', conversation);
+    console.log('Found/created conversation:', conversationId);
 
-    // Create a message record with our own UUID
+    // Check if message with this WhatsApp ID already exists
+    const { data: existingMessage } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("whatsapp_message_id", whatsappMessageId)
+      .single();
+
+    if (existingMessage) {
+      console.log('Message already exists, skipping processing:', whatsappMessageId);
+      return;
+    }
+
+    // Create a message record for the user's message
     const { data: messageData, error: messageError } = await supabase
       .from("messages")
       .insert({
-        conversation_id: conversation.id,
+        conversation_id: conversationId,
         content: userMessage,
         sender_name: userName,
         sender_number: userId,
@@ -71,7 +95,7 @@ export async function processWhatsAppMessage(
     const context = {
       userName,
       messageId: messageData.id,
-      conversationId: conversation.id,
+      conversationId,
       knowledgeBase: conversationHistory,
       userMessage,
       platform: 'whatsapp' as const
@@ -92,7 +116,7 @@ export async function processWhatsAppMessage(
     const WHATSAPP_PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID')!;
     await sendWhatsAppMessage(userId, responseText, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_ID);
 
-    // Store the conversation
+    // Store only the AI response
     await storeConversation(supabase, userId, userName, userMessage, responseText);
 
   } catch (error) {

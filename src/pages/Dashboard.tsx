@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -82,46 +83,56 @@ const Dashboard = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           {platforms.map((platform) => (
-            <PlatformCard
-              key={platform.id}
-              {...platform}
-              description={`Manage your ${platform.name} conversations`}
-              isSelected={selectedPlatform === platform.id}
-              onSelect={handlePlatformSelect}
-            />
+            <div key={platform.id} className="w-full">
+              <PlatformCard
+                {...platform}
+                description={`Manage your ${platform.name} conversations`}
+                isSelected={selectedPlatform === platform.id}
+                onSelect={handlePlatformSelect}
+                useShine={platform.id === "whatsapp"}
+              />
+            </div>
           ))}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <UtilityCard
-            icon={FileText}
-            title="Knowledge Base"
-            description="Manage your uploaded files and documents"
-            buttonText="Manage Files"
-            onClick={() => navigate("/knowledge-base")}
-            colorClass="text-purple-600"
-            bgColorClass="bg-purple-50 dark:bg-purple-950/20"
-          />
+          <div className="w-full">
+            <UtilityCard
+              icon={FileText}
+              title="Knowledge Base"
+              description="Manage your uploaded files and documents"
+              buttonText="Manage Files"
+              onClick={() => navigate("/knowledge-base")}
+              colorClass="text-purple-600"
+              bgColorClass="bg-purple-50 dark:bg-purple-950/20"
+              useShine={true}
+            />
+          </div>
 
-          <UtilityCard
-            icon={Network}
-            title="Agent Flow"
-            description="Design and manage your agent workflows"
-            buttonText="Setup Agents"
-            onClick={() => navigate("/agent-flow")}
-            colorClass="text-indigo-600"
-            bgColorClass="bg-indigo-50 dark:bg-indigo-950/20"
-          />
+          <div className="w-full">
+            <UtilityCard
+              icon={Network}
+              title="Agent Flow"
+              description="Design and manage your agent workflows"
+              buttonText="Setup Agents"
+              onClick={() => navigate("/agent-flow")}
+              colorClass="text-indigo-600"
+              bgColorClass="bg-indigo-50 dark:bg-indigo-950/20"
+            />
+          </div>
 
-          <UtilityCard
-            icon={Ticket}
-            title="Tickets"
-            description="Manage customer support tickets"
-            buttonText="View Tickets"
-            onClick={() => navigate("/tickets")}
-            colorClass="text-orange-600"
-            bgColorClass="bg-orange-50 dark:bg-orange-950/20"
-          />
+          <div className="w-full">
+            <UtilityCard
+              icon={Ticket}
+              title="Tickets"
+              description="Manage customer support tickets"
+              buttonText="View Tickets"
+              onClick={() => navigate("/tickets")}
+              colorClass="text-orange-600"
+              bgColorClass="bg-orange-50 dark:bg-orange-950/20"
+              useShine={true}
+            />
+          </div>
         </div>
       </div>
     </div>

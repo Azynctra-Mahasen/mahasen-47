@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 export async function storeConversation(supabase: any, userId: string, userName: string, userMessage: string, aiResponse: string) {
@@ -30,25 +31,17 @@ export async function storeConversation(supabase: any, userId: string, userName:
       conversationId = conversation.id;
     }
 
-    // Create messages with our own UUIDs
-    const { error: msgError } = await supabase.from('messages').insert([
-      {
-        conversation_id: conversationId,
-        content: userMessage,
-        status: 'received',
-        sender_name: userName,
-        sender_number: userId
-      },
-      {
-        conversation_id: conversationId,
-        content: aiResponse,
-        status: 'sent',
-        sender_name: 'AI Assistant',
-        sender_number: 'system'
-      }
-    ]);
+    // Only insert AI response message since user message is already stored
+    const { error: msgError } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      content: aiResponse,
+      status: 'sent',
+      sender_name: 'AI Assistant',
+      sender_number: 'system'
+    });
 
     if (msgError) throw msgError;
+    
     return conversationId;
   } catch (error) {
     console.error('Error storing conversation:', error);

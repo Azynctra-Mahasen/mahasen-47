@@ -331,6 +331,30 @@ export type Database = {
           },
         ]
       }
+      user_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          ui_mode: Database["public"]["Enums"]["ui_mode"] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ui_mode?: Database["public"]["Enums"]["ui_mode"] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ui_mode?: Database["public"]["Enums"]["ui_mode"] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       webhook_errors: {
         Row: {
           created_at: string
@@ -390,6 +414,7 @@ export type Database = {
       message_status: "sent" | "received"
       platform_type: "whatsapp" | "facebook" | "instagram"
       ticket_status: "New" | "In Progress" | "Escalated" | "Completed"
+      ui_mode: "dev" | "full"
     }
     CompositeTypes: {
       [_ in never]: never

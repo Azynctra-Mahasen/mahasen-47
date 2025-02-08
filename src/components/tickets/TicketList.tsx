@@ -86,7 +86,7 @@ export const TicketList = ({ tickets, loading, sortConfig, onSortChange }: Ticke
   }
 
   return (
-    <div className="relative">
+    <div className="relative overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -96,25 +96,25 @@ export const TicketList = ({ tickets, loading, sortConfig, onSortChange }: Ticke
             <TableHead className="w-48 cursor-pointer" onClick={() => handleSort('title')}>
               Title {getSortIcon('title')}
             </TableHead>
-            <TableHead className="w-40 cursor-pointer" onClick={() => handleSort('customer_name')}>
+            <TableHead className="hidden md:table-cell w-40 cursor-pointer" onClick={() => handleSort('customer_name')}>
               Customer Name {getSortIcon('customer_name')}
             </TableHead>
-            <TableHead className="w-32 cursor-pointer" onClick={() => handleSort('platform')}>
+            <TableHead className="hidden sm:table-cell w-32 cursor-pointer" onClick={() => handleSort('platform')}>
               Platform {getSortIcon('platform')}
             </TableHead>
-            <TableHead className="w-32 cursor-pointer" onClick={() => handleSort('type')}>
+            <TableHead className="hidden lg:table-cell w-32 cursor-pointer" onClick={() => handleSort('type')}>
               Type {getSortIcon('type')}
             </TableHead>
             <TableHead className="w-32 cursor-pointer" onClick={() => handleSort('status')}>
               Status {getSortIcon('status')}
             </TableHead>
-            <TableHead className="w-32 cursor-pointer" onClick={() => handleSort('priority')}>
+            <TableHead className="hidden sm:table-cell w-32 cursor-pointer" onClick={() => handleSort('priority')}>
               Priority {getSortIcon('priority')}
             </TableHead>
-            <TableHead className="w-32">
+            <TableHead className="hidden lg:table-cell w-32">
               Assigned To
             </TableHead>
-            <TableHead className="w-40 cursor-pointer" onClick={() => handleSort('created_at')}>
+            <TableHead className="hidden md:table-cell w-40 cursor-pointer" onClick={() => handleSort('created_at')}>
               Created {getSortIcon('created_at')}
             </TableHead>
           </TableRow>
@@ -141,29 +141,29 @@ export const TicketList = ({ tickets, loading, sortConfig, onSortChange }: Ticke
               >
                 <TableCell>#{ticket.id}</TableCell>
                 <TableCell className="font-medium">{ticket.title}</TableCell>
-                <TableCell>{ticket.customer_name}</TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">{ticket.customer_name}</TableCell>
+                <TableCell className="hidden sm:table-cell">
                   <Badge variant="secondary" className={platformColors[ticket.platform]}>
                     {ticket.platform}
                   </Badge>
                 </TableCell>
-                <TableCell>{ticket.type}</TableCell>
+                <TableCell className="hidden lg:table-cell">{ticket.type}</TableCell>
                 <TableCell>
                   <Badge variant="secondary" className={statusColors[ticket.status]}>
                     {ticket.status}
                   </Badge>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden sm:table-cell">
                   {ticket.priority && (
                     <Badge variant="secondary" className={priorityColors[ticket.priority]}>
                       {ticket.priority}
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden lg:table-cell">
                   {ticket.assigned_to || '-'}
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   {format(new Date(ticket.created_at), "MMM d, yyyy HH:mm")}
                 </TableCell>
               </TableRow>
