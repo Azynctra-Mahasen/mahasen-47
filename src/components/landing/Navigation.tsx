@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -13,23 +14,30 @@ export const Navigation = () => {
             <img 
               src="/lovable-uploads/6bdab8c7-96e8-4d13-84c2-8bf7b589255f.png" 
               alt="Mahasen AI" 
-              className="h-8"
+              className="h-8 cursor-pointer"
+              onClick={() => navigate("/")}
             />
           </div>
           <div className="flex items-center space-x-4">
-            <ThemeToggle />
             <Button 
-              variant="outline" 
-              onClick={() => navigate("/login")}
+              variant="ghost" 
+              onClick={() => navigate("/pricing")}
               className="text-foreground"
             >
-              Sign in
+              Pricing
             </Button>
+            <ThemeToggle />
             <Button 
-              onClick={() => navigate("/signup")}
+              onClick={() => window.open("https://wa.me/message/TTJHEFNWX2KKF1", "_blank")}
               className="text-primary-foreground"
             >
               Get Started
+            </Button>
+            <Button 
+              onClick={() => navigate("/login")}
+              className="text-primary-foreground"
+            >
+              Sign In
             </Button>
           </div>
         </div>

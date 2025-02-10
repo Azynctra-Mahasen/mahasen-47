@@ -19,6 +19,7 @@ import AISettings from "./pages/AISettings";
 import AgentFlow from "./pages/AgentFlow";
 import Tickets from "./pages/Tickets";
 import CompletedTickets from "./pages/CompletedTickets";
+import Pricing from "./pages/Pricing";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -143,6 +144,7 @@ const App = () => {
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/pricing" element={<Pricing />} />
               <Route
                 path="/login"
                 element={
