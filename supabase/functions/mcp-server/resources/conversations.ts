@@ -1,5 +1,5 @@
 
-import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ResourceTemplate } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/mcp.js";
 import { initSupabase, logger, MCPError } from "../utils.ts";
 import { ConversationResource } from "../types.ts";
 
