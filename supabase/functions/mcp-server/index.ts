@@ -1,8 +1,7 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { z } from "zod";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { 
   knowledgeBaseResource, 
   handleKnowledgeBaseResource 
