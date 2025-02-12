@@ -3,6 +3,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
+import { 
+  knowledgeBaseResource, 
+  handleKnowledgeBaseResource 
+} from "./resources/knowledge-base.ts";
+import { 
+  conversationResource, 
+  handleConversationResource 
+} from "./resources/conversations.ts";
 
 // CORS headers for the Edge Function
 const corsHeaders = {
@@ -30,6 +38,20 @@ const server = new McpServer({
     }
   }
 });
+
+// Register Knowledge Base resource
+server.resource(
+  "knowledge-base",
+  knowledgeBaseResource,
+  handleKnowledgeBaseResource
+);
+
+// Register Conversation resource
+server.resource(
+  "conversation",
+  conversationResource,
+  handleConversationResource
+);
 
 // Basic health check resource
 server.resource(

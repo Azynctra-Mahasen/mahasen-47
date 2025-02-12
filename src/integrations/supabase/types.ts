@@ -75,6 +75,41 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_contexts: {
+        Row: {
+          context_data: Json
+          context_type: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          context_data: Json
+          context_type: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          context_data?: Json
+          context_type?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_contexts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           ai_enabled: boolean | null
@@ -82,6 +117,8 @@ export type Database = {
           contact_number: string
           created_at: string | null
           id: string
+          last_context_update: string | null
+          metadata: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at: string | null
         }
@@ -91,6 +128,8 @@ export type Database = {
           contact_number: string
           created_at?: string | null
           id?: string
+          last_context_update?: string | null
+          metadata?: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
         }
@@ -100,6 +139,8 @@ export type Database = {
           contact_number?: string
           created_at?: string | null
           id?: string
+          last_context_update?: string | null
+          metadata?: Json | null
           platform?: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
         }
@@ -107,38 +148,47 @@ export type Database = {
       }
       knowledge_base_files: {
         Row: {
+          category: string | null
           content: string | null
           content_type: string
           created_at: string
           embedding: string | null
+          embedding_status: string | null
           file_path: string
           filename: string
           fts: unknown | null
           id: string
+          metadata: Json | null
           size: number
           user_id: string
         }
         Insert: {
+          category?: string | null
           content?: string | null
           content_type: string
           created_at?: string
           embedding?: string | null
+          embedding_status?: string | null
           file_path: string
           filename: string
           fts?: unknown | null
           id?: string
+          metadata?: Json | null
           size: number
           user_id: string
         }
         Update: {
+          category?: string | null
           content?: string | null
           content_type?: string
           created_at?: string
           embedding?: string | null
+          embedding_status?: string | null
           file_path?: string
           filename?: string
           fts?: unknown | null
           id?: string
+          metadata?: Json | null
           size?: number
           user_id?: string
         }
