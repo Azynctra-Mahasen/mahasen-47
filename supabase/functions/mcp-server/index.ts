@@ -1,7 +1,10 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { Server } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/index.js";
+import { StdioServerTransport } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/stdio.js";
+import { SSEServerTransport } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/sse.js";
+import { ServerConfig } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/types.js";
 import { 
   knowledgeBaseResource, 
   handleKnowledgeBaseResource 
@@ -17,8 +20,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Create MCP Server instance
-const server = new McpServer({
+// Server configuration
+const serverConfig: ServerConfig = {
   name: "Mahasen AI",
   version: "1.0.0",
   capabilities: {
@@ -36,60 +39,64 @@ const server = new McpServer({
       contextual: true
     }
   }
-});
+};
+
+// Create server instance
+const server = new Server(serverConfig);
 
 // Register Knowledge Base resource
-server.resource(
-  "knowledge-base",
-  knowledgeBaseResource,
-  handleKnowledgeBaseResource
-);
+server.setRequestHandler("resource:list", async (request) => {
+  if (request.params.uri.startsWith("kb://")) {
+    return handleKnowledgeBaseResource(new URL(request.params.uri), {
+      category: request.params.uri.split("/")[2]
+    });
+  }
+  return { contents: [] };
+});
+
+server.setRequestHandler("resource:read", async (request) => {
+  if (request.params.uri.startsWith("kb://")) {
+    return handleKnowledgeBaseResource(new URL(request.params.uri), {
+      category: request.params.uri.split("/")[2],
+      documentId: request.params.uri.split("/")[3]
+    });
+  }
+  return { contents: [] };
+});
 
 // Register Conversation resource
-server.resource(
-  "conversation",
-  conversationResource,
-  handleConversationResource
-);
+server.setRequestHandler("resource:list", async (request) => {
+  if (request.params.uri.startsWith("conversation://")) {
+    return handleConversationResource(new URL(request.params.uri), {
+      platform: request.params.uri.split("/")[2]
+    });
+  }
+  return { contents: [] };
+});
 
-// Basic health check resource
-server.resource(
-  "health",
-  "health://status",
-  async (uri) => ({
-    contents: [{
-      uri: uri.href,
-      text: "Mahasen AI MCP Server is running"
-    }]
-  })
-);
+server.setRequestHandler("resource:read", async (request) => {
+  if (request.params.uri.startsWith("conversation://")) {
+    return handleConversationResource(new URL(request.params.uri), {
+      platform: request.params.uri.split("/")[2],
+      conversationId: request.params.uri.split("/")[3]
+    });
+  }
+  return { contents: [] };
+});
 
-// Basic ping tool for testing
-server.tool(
-  "ping",
-  { message: z.string().optional() },
-  async ({ message }) => ({
-    content: [{ 
-      type: "text", 
-      text: `Pong! ${message || 'No message provided'}` 
-    }]
-  })
-);
-
-// Basic test prompt
-server.prompt(
-  "test",
-  { input: z.string() },
-  ({ input }) => ({
-    messages: [{
-      role: "user",
-      content: {
-        type: "text",
-        text: `Test prompt received: ${input}`
-      }
-    }]
-  })
-);
+// Register basic ping tool
+server.setRequestHandler("tool:call", async (request) => {
+  if (request.params.name === "ping") {
+    const message = request.params.arguments?.message as string;
+    return {
+      content: [{ 
+        type: "text", 
+        text: `Pong! ${message || 'No message provided'}` 
+      }]
+    };
+  }
+  throw new Error("Unknown tool");
+});
 
 serve(async (req) => {
   // Handle CORS preflight requests
