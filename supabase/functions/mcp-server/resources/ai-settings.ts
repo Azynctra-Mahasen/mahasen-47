@@ -15,6 +15,7 @@ export const handleAISettingsResource = async (uri: URL) => {
     const { data, error } = await supabase
       .from("ai_settings")
       .select("*")
+      .eq("id", 1)
       .single();
 
     if (error) throw error;
