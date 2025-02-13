@@ -14,6 +14,14 @@ import {
   conversationResource, 
   handleConversationResource 
 } from "./resources/conversations.ts";
+import {
+  ticketResource,
+  handleTicketResource
+} from "./resources/tickets.ts";
+import {
+  aiSettingsResource,
+  handleAISettingsResource
+} from "./resources/ai-settings.ts";
 
 // CORS headers for the Edge Function
 const corsHeaders = {
@@ -81,6 +89,60 @@ server.setRequestHandler("resource:read", async (request) => {
       platform: request.params.uri.split("/")[2],
       conversationId: request.params.uri.split("/")[3]
     });
+  }
+  return { contents: [] };
+});
+
+// Register Ticket resource
+server.setRequestHandler("resource:list", async (request) => {
+  if (request.params.uri.startsWith("ticket://")) {
+    return handleTicketResource(new URL(request.params.uri), {
+      status: request.params.uri.split("/")[2]
+    });
+  }
+  return { contents: [] };
+});
+
+server.setRequestHandler("resource:read", async (request) => {
+  if (request.params.uri.startsWith("ticket://")) {
+    return handleTicketResource(new URL(request.params.uri), {
+      status: request.params.uri.split("/")[2],
+      ticketId: request.params.uri.split("/")[3]
+    });
+  }
+  return { contents: [] };
+});
+
+// Register AI Settings resource
+server.setRequestHandler("resource:read", async (request) => {
+  if (request.params.uri.startsWith("ai-settings://")) {
+    return handleAISettingsResource(new URL(request.params.uri));
+  }
+  return { contents: [] };
+});
+
+// Register search handler for knowledge base
+server.setRequestHandler("resource:search", async (request) => {
+  if (request.params.uri.startsWith("kb://")) {
+    const { query, embedding } = request.params;
+    const { data, error } = await initSupabase().rpc('match_knowledge_base', {
+      query_text: query,
+      query_embedding: embedding,
+      match_threshold: 0.5,
+      match_count: 5
+    });
+
+    if (error) throw error;
+
+    return {
+      contents: data.map((match: any) => ({
+        uri: `kb://general/${match.id}`,
+        text: match.content,
+        metadata: {
+          similarity: match.similarity
+        }
+      }))
+    };
   }
   return { contents: [] };
 });
