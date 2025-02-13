@@ -1,10 +1,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { Server } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/index.js";
-import { StdioServerTransport } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/stdio.js";
-import { SSEServerTransport } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/server/sse.js";
-import { ServerConfig } from "https://esm.sh/@modelcontextprotocol/sdk@1.5.0/types.js";
+import { 
+  Server,
+  StdioServerTransport,
+  SSEServerTransport
+} from "npm:@modelcontextprotocol/sdk@1.5.0";
 import { 
   knowledgeBaseResource, 
   handleKnowledgeBaseResource 
@@ -21,7 +22,7 @@ const corsHeaders = {
 };
 
 // Server configuration
-const serverConfig: ServerConfig = {
+const serverConfig = {
   name: "Mahasen AI",
   version: "1.0.0",
   capabilities: {
