@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { 
@@ -22,6 +21,8 @@ import {
   aiSettingsResource,
   handleAISettingsResource
 } from "./resources/ai-settings.ts";
+import { connectionManager } from "./connection-manager.ts";
+import { logger } from "./utils.ts";
 
 // CORS headers for the Edge Function
 const corsHeaders = {
@@ -147,9 +148,14 @@ server.setRequestHandler("resource:search", async (request) => {
   return { contents: [] };
 });
 
-// Register basic ping tool
+// Register ping tool for connection health checks
 server.setRequestHandler("tool:call", async (request) => {
   if (request.params.name === "ping") {
+    const connectionId = request.meta?.connectionId as string;
+    if (connectionId) {
+      connectionManager.updatePing(connectionId);
+    }
+    
     const message = request.params.arguments?.message as string;
     return {
       content: [{ 
@@ -172,8 +178,23 @@ serve(async (req) => {
       // Handle SSE connections
       const url = new URL(req.url);
       if (url.pathname === '/sse') {
+        const connectionId = crypto.randomUUID();
         const transport = new SSEServerTransport("/messages", new Response());
+        
+        // Register the new connection
+        connectionManager.addConnection(connectionId, 'sse');
+        
+        // Attach connection metadata to the transport
+        transport.meta = { connectionId };
+        
         await server.connect(transport);
+        
+        // Clean up connection when the SSE connection ends
+        transport.onClose = () => {
+          connectionManager.removeConnection(connectionId);
+          logger.info(`SSE connection closed: ${connectionId}`);
+        };
+        
         return transport.response;
       }
     } else if (req.method === 'POST') {
@@ -195,7 +216,7 @@ serve(async (req) => {
       headers: corsHeaders 
     });
   } catch (error) {
-    console.error('Error in MCP server:', error);
+    logger.error('Error in MCP server:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: {
