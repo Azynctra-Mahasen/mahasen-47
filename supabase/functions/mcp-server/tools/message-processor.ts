@@ -1,6 +1,6 @@
 
-import { IntentAnalysis, TicketCreationInfo } from "../../../src/types/intent.ts";
-import { IntentDetectionService } from "../../../src/services/intent/intentDetectionService.ts";
+import { IntentAnalysis, TicketCreationInfo } from "../types/intent.ts";
+import { IntentDetectionService } from "../services/intentDetectionService.ts";
 import { initSupabase, logger } from "../utils.ts";
 
 export async function processMessage(params: {
