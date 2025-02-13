@@ -1,7 +1,7 @@
-
 import { IntentAnalysis, UrgencyLevel, TicketCreationInfo } from "../types/intent.ts";
 import { initSupabase, logger } from "../utils.ts";
 import { IntentDetectionService } from "../services/intentDetectionService.ts";
+import { createTicket, updateTicketProduct } from "./ticket-processor.ts";
 
 export async function analyzeIntent(params: {
   message: string;
@@ -106,7 +106,6 @@ export async function processOrder(params: {
   orderId?: number;
   errorMessage?: string;
 }> {
-  const supabase = initSupabase();
   logger.info('Processing order:', params);
 
   try {
@@ -120,28 +119,30 @@ export async function processOrder(params: {
       };
     }
 
-    // Create ticket for the order
-    const { data: ticket, error: ticketError } = await supabase
-      .from('tickets')
-      .insert({
-        title: `Order: ${orderInfo.productName}`,
-        customer_name: params.customerName,
-        platform: params.platform,
-        type: 'ORDER',
-        status: 'New',
-        priority: 'HIGH',
-        body: `Product: ${orderInfo.productName}\nQuantity: ${orderInfo.quantity}`,
-        message_id: params.messageId,
-        conversation_id: params.conversationId
-      })
-      .select()
-      .single();
+    // Create ticket for the order using the new createTicket function
+    const ticketResult = await createTicket({
+      title: `Order: ${orderInfo.productName}`,
+      customerName: params.customerName,
+      platform: params.platform,
+      type: 'ORDER',
+      priority: 'HIGH',
+      body: `Product: ${orderInfo.productName}\nQuantity: ${orderInfo.quantity}`,
+      messageId: params.messageId,
+      conversationId: params.conversationId,
+      intentType: 'ORDER_PLACEMENT',
+      productInfo: {
+        name: orderInfo.productName,
+        quantity: orderInfo.quantity
+      }
+    });
 
-    if (ticketError) throw ticketError;
+    if (!ticketResult.success) {
+      throw new Error(ticketResult.error);
+    }
 
     return {
       orderCreated: true,
-      orderId: ticket.id
+      orderId: ticketResult.ticketId
     };
   } catch (error) {
     logger.error('Error processing order:', error);
