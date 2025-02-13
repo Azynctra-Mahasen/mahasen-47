@@ -1,6 +1,7 @@
 
-import { IntentAnalysis, UrgencyLevel, TicketCreationInfo } from "../../../src/types/intent.ts";
+import { IntentAnalysis, UrgencyLevel, TicketCreationInfo } from "../types/intent.ts";
 import { initSupabase, logger } from "../utils.ts";
+import { IntentDetectionService } from "../services/intentDetectionService.ts";
 
 export async function analyzeIntent(params: {
   message: string;
