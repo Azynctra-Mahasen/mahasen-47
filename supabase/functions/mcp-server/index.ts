@@ -54,6 +54,18 @@ const serverConfig = {
 // Create server instance
 const server = new Server(serverConfig);
 
+// Import tools
+import {
+  processMessage,
+  sendResponse
+} from "./tools/message-processor.ts";
+import {
+  analyzeIntent,
+  detectIntent,
+  evaluateEscalation,
+  processOrder
+} from "./tools/intent-processor.ts";
+
 // Register Knowledge Base resource
 server.setRequestHandler("resource:list", async (request) => {
   if (request.params.uri.startsWith("kb://")) {
@@ -148,23 +160,79 @@ server.setRequestHandler("resource:search", async (request) => {
   return { contents: [] };
 });
 
-// Register ping tool for connection health checks
+// Register message processing tools
 server.setRequestHandler("tool:call", async (request) => {
-  if (request.params.name === "ping") {
-    const connectionId = request.meta?.connectionId as string;
-    if (connectionId) {
-      connectionManager.updatePing(connectionId);
-    }
-    
-    const message = request.params.arguments?.message as string;
-    return {
-      content: [{ 
-        type: "text", 
-        text: `Pong! ${message || 'No message provided'}` 
-      }]
-    };
+  const connectionId = request.meta?.connectionId as string;
+  
+  switch (request.params.name) {
+    case "process-message":
+      const messageResult = await processMessage(request.params.arguments);
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(messageResult) 
+        }]
+      };
+
+    case "detect-intent":
+      const intentResult = await detectIntent(request.params.arguments);
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(intentResult) 
+        }]
+      };
+
+    case "analyze-intent":
+      const analysisResult = await analyzeIntent(request.params.arguments);
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(analysisResult) 
+        }]
+      };
+
+    case "evaluate-escalation":
+      const escalationResult = await evaluateEscalation(request.params.arguments);
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(escalationResult) 
+        }]
+      };
+
+    case "process-order":
+      const orderResult = await processOrder(request.params.arguments);
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(orderResult) 
+        }]
+      };
+
+    case "send-response":
+      const sendResult = await sendResponse(request.params.arguments);
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify({ success: sendResult }) 
+        }]
+      };
+
+    case "ping":
+      if (connectionId) {
+        connectionManager.updatePing(connectionId);
+      }
+      return {
+        content: [{ 
+          type: "text", 
+          text: `Pong! ${request.params.arguments?.message || 'No message provided'}` 
+        }]
+      };
+
+    default:
+      throw new Error("Unknown tool");
   }
-  throw new Error("Unknown tool");
 });
 
 serve(async (req) => {
