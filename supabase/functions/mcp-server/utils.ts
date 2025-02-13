@@ -1,5 +1,5 @@
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "npm:@supabase/supabase-js@2.38.4";
 
 // Error handling utilities
 export class MCPError extends Error {
