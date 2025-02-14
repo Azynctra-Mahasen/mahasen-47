@@ -694,6 +694,39 @@ export type Database = {
         }
         Relationships: []
       }
+      error_trends: {
+        Row: {
+          affected_components: number | null
+          change_percentage: number | null
+          day: string | null
+          error_count: number | null
+          log_level: string | null
+        }
+        Relationships: []
+      }
+      performance_summary: {
+        Row: {
+          avg_response_time: number | null
+          endpoint_name: string | null
+          max_response_time: number | null
+          min_response_time: number | null
+          success_rate: number | null
+          successful_requests: number | null
+          time_bucket: string | null
+          total_requests: number | null
+        }
+        Relationships: []
+      }
+      usage_summary: {
+        Row: {
+          action_type: string | null
+          day: string | null
+          feature_name: string | null
+          unique_users: number | null
+          usage_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       match_knowledge_base: {
