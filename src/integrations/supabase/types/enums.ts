@@ -5,7 +5,6 @@ export interface DatabaseEnums {
     | "deepseek-r1-distill-llama-70b"
     | "gemini-2.0-flash-exp"
     | "groq-llama-3.3-70b-versatile"
-    | "mcp-llama-70b"
   ai_tone: "Professional" | "Friendly" | "Empathetic" | "Playful"
   message_status: "sent" | "received"
   platform_type: "whatsapp" | "facebook" | "instagram"
