@@ -18,22 +18,6 @@ export const DashboardHeader = ({ userName, onNavigate, onSignOut }: DashboardHe
       <div className="flex items-center gap-4">
         <Button
           variant="outline"
-          onClick={() => onNavigate("/knowledge-base")}
-          className="flex items-center gap-2"
-        >
-          <FileText className="h-4 w-4" />
-          Manage Files
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => onNavigate("/agent-flow")}
-          className="flex items-center gap-2"
-        >
-          <Network className="h-4 w-4" />
-          Agent Flow
-        </Button>
-        <Button
-          variant="outline"
           onClick={() => onNavigate("/ai-settings")}
           className="flex items-center gap-2"
         >
