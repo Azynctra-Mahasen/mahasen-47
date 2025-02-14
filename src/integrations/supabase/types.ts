@@ -309,6 +309,33 @@ export type Database = {
         }
         Relationships: []
       }
+      performance_metrics: {
+        Row: {
+          details: Json | null
+          endpoint_name: string
+          id: string
+          response_time: number
+          success: boolean
+          timestamp: string | null
+        }
+        Insert: {
+          details?: Json | null
+          endpoint_name: string
+          id?: string
+          response_time: number
+          success: boolean
+          timestamp?: string | null
+        }
+        Update: {
+          details?: Json | null
+          endpoint_name?: string
+          id?: string
+          response_time?: number
+          success?: boolean
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
       platform_response_formats: {
         Row: {
           created_at: string | null
@@ -414,6 +441,39 @@ export type Database = {
           retry_count?: number | null
           sync_status?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_logs: {
+        Row: {
+          component: string
+          error_code: string | null
+          id: string
+          log_level: string
+          message: string
+          metadata: Json | null
+          stack_trace: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          component: string
+          error_code?: string | null
+          id?: string
+          log_level: string
+          message: string
+          metadata?: Json | null
+          stack_trace?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          component?: string
+          error_code?: string | null
+          id?: string
+          log_level?: string
+          message?: string
+          metadata?: Json | null
+          stack_trace?: string | null
+          timestamp?: string | null
         }
         Relationships: []
       }
@@ -545,6 +605,33 @@ export type Database = {
           },
         ]
       }
+      usage_stats: {
+        Row: {
+          action_type: string
+          details: Json | null
+          feature_name: string
+          id: string
+          timestamp: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          details?: Json | null
+          feature_name: string
+          id?: string
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          details?: Json | null
+          feature_name?: string
+          id?: string
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_preferences: {
         Row: {
           created_at: string
@@ -598,7 +685,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      error_summary: {
+        Row: {
+          component: string | null
+          error_count: number | null
+          log_level: string | null
+          time_bucket: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       match_knowledge_base: {
