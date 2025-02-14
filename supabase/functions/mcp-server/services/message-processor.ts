@@ -10,7 +10,13 @@ const MessageSchema = z.object({
     number: z.string()
   }),
   content: z.string(),
-  messageId: z.string().optional()
+  messageId: z.string().optional(),
+  orderInfo: z.object({
+    product: z.string(),
+    quantity: z.number(),
+    state: z.enum(['COLLECTING_INFO', 'CONFIRMING', 'PROCESSING']),
+    confirmed: z.boolean()
+  }).optional()
 });
 
 export async function processMessage(data: unknown) {
@@ -54,7 +60,7 @@ export async function processMessage(data: unknown) {
       conversationId = existingConversation.id;
     }
 
-    // Store message
+    // Store message with order info if present
     const { error: messageError } = await supabase
       .from('messages')
       .insert({
@@ -63,7 +69,8 @@ export async function processMessage(data: unknown) {
         sender_name: validatedData.sender.name,
         sender_number: validatedData.sender.number,
         status: 'received',
-        whatsapp_message_id: validatedData.messageId
+        whatsapp_message_id: validatedData.messageId,
+        order_info: validatedData.orderInfo || null
       });
 
     if (messageError) {
@@ -86,6 +93,39 @@ export async function processMessage(data: unknown) {
         message: 'Failed to update sync status',
         details: { error: syncError }
       });
+    }
+
+    // If this is a confirmed order, create a ticket
+    if (validatedData.orderInfo?.confirmed && validatedData.orderInfo?.state === 'PROCESSING') {
+      try {
+        const { error: ticketError } = await supabase
+          .from('tickets')
+          .insert({
+            title: `Order: ${validatedData.orderInfo.product}`,
+            customer_name: validatedData.sender.name,
+            platform: validatedData.platform,
+            type: 'Order',
+            status: 'New',
+            priority: 'HIGH',
+            body: `Product: ${validatedData.orderInfo.product}\nQuantity: ${validatedData.orderInfo.quantity}`,
+            conversation_id: conversationId,
+            product_info: {
+              product: validatedData.orderInfo.product,
+              quantity: validatedData.orderInfo.quantity
+            }
+          });
+
+        if (ticketError) {
+          throw new Error(`Failed to create order ticket: ${ticketError.message}`);
+        }
+      } catch (error) {
+        await logWebhookError({
+          type: 'PROCESSING',
+          message: 'Failed to create order ticket',
+          details: { error, orderInfo: validatedData.orderInfo }
+        });
+        throw error;
+      }
     }
 
     return { success: true, conversationId };
