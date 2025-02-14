@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ const AISettings = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState<AIModel>("deepseek-r1-distill-llama-70b");
   const [isModelChangeDisabled, setIsModelChangeDisabled] = useState(false);
+  const [useMCP, setUseMCP] = useState(false);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -53,6 +55,7 @@ const AISettings = () => {
           setContextMemoryLength(data.context_memory_length?.toString() || "2");
           setConversationTimeout(data.conversation_timeout_hours || 1);
           setModelName(data.model_name);
+          setUseMCP(data.use_mcp || false);
         }
       } catch (error) {
         console.error('Error loading AI settings:', error);
@@ -107,6 +110,7 @@ const AISettings = () => {
           context_memory_length: memoryLength,
           conversation_timeout_hours: conversationTimeout,
           model_name: modelName,
+          use_mcp: useMCP,
           updated_at: new Date().toISOString()
         });
 
@@ -174,9 +178,11 @@ const AISettings = () => {
             contextMemoryLength={contextMemoryLength}
             conversationTimeout={conversationTimeout}
             modelName={modelName}
+            useMCP={useMCP}
             onContextMemoryChange={setContextMemoryLength}
             onTimeoutChange={setConversationTimeout}
             onModelChange={setModelName}
+            onMCPChange={setUseMCP}
             isModelChangeDisabled={isModelChangeDisabled}
           />
 

@@ -12,6 +12,7 @@ export type AiSettingsTables = {
       model_name: DatabaseEnums["ai_model"]
       tone: DatabaseEnums["ai_tone"]
       updated_at: string
+      use_mcp: boolean
     }
     Insert: {
       behaviour?: string | null
@@ -22,6 +23,7 @@ export type AiSettingsTables = {
       model_name?: DatabaseEnums["ai_model"]
       tone?: DatabaseEnums["ai_tone"]
       updated_at?: string
+      use_mcp?: boolean
     }
     Update: {
       behaviour?: string | null
@@ -32,6 +34,7 @@ export type AiSettingsTables = {
       model_name?: DatabaseEnums["ai_model"]
       tone?: DatabaseEnums["ai_tone"]
       updated_at?: string
+      use_mcp?: boolean
     }
     Relationships: []
   }

@@ -29,7 +29,8 @@ export const handleAISettingsResource = async (uri: URL) => {
           tone: data.tone,
           contextMemoryLength: data.context_memory_length,
           conversationTimeout: data.conversation_timeout_hours,
-          behaviour: data.behaviour
+          behaviour: data.behaviour,
+          useMCP: data.use_mcp
         })
       }]
     };

@@ -52,6 +52,7 @@ export type Database = {
           model_name: Database["public"]["Enums"]["ai_model"]
           tone: Database["public"]["Enums"]["ai_tone"]
           updated_at: string
+          use_mcp: boolean | null
         }
         Insert: {
           behaviour?: string | null
@@ -62,6 +63,7 @@ export type Database = {
           model_name?: Database["public"]["Enums"]["ai_model"]
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
+          use_mcp?: boolean | null
         }
         Update: {
           behaviour?: string | null
@@ -72,6 +74,7 @@ export type Database = {
           model_name?: Database["public"]["Enums"]["ai_model"]
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
+          use_mcp?: boolean | null
         }
         Relationships: []
       }
@@ -752,6 +755,7 @@ export type Database = {
         | "deepseek-r1-distill-llama-70b"
         | "gemini-2.0-flash-exp"
         | "groq-llama-3.3-70b-versatile"
+        | "mcp-llama-70b"
       ai_tone: "Professional" | "Friendly" | "Empathetic" | "Playful"
       message_status: "sent" | "received"
       platform_type: "whatsapp" | "facebook" | "instagram"
