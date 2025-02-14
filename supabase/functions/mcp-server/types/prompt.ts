@@ -12,6 +12,7 @@ export interface ConversationContext {
   language: string;
   lastIntent?: string;
   orderState?: OrderState;
+  lastContextUpdate?: string;
 }
 
 export interface OrderState {
@@ -28,4 +29,10 @@ export interface KnowledgeBaseContext {
     similarity: number;
   }>;
   lastUpdated: string;
+}
+
+export interface SystemMessage {
+  key: string;
+  params?: Record<string, string | number>;
+  language?: string;
 }
