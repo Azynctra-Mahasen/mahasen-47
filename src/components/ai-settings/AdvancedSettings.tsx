@@ -100,7 +100,6 @@ export const AdvancedSettings = ({
                 <SelectItem value="groq-llama-3.3-70b-versatile">Groq: Llama 3.3 70B Versatile</SelectItem>
                 <SelectItem value="gemini-2.0-flash-exp">Gemini 2.0 Flash Exp</SelectItem>
                 <SelectItem value="deepseek-r1-distill-llama-70b">Groq: deepseek-r1-distill-llama-70b</SelectItem>
-                <SelectItem value="mcp-llama-70b">MCP: Llama 70B (Experimental)</SelectItem>
               </SelectContent>
             </Select>
             {isModelChangeDisabled && (
