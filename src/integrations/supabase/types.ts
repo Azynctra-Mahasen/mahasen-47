@@ -75,6 +75,50 @@ export type Database = {
         }
         Relationships: []
       }
+      context_tracking: {
+        Row: {
+          context_type: string
+          conversation_id: string | null
+          created_at: string | null
+          effectiveness_score: number | null
+          id: string
+          interaction_count: number | null
+          last_interaction: string | null
+          sentiment: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          context_type: string
+          conversation_id?: string | null
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          interaction_count?: number | null
+          last_interaction?: string | null
+          sentiment?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          context_type?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          interaction_count?: number | null
+          last_interaction?: string | null
+          sentiment?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "context_tracking_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_contexts: {
         Row: {
           context_data: Json
@@ -259,6 +303,75 @@ export type Database = {
           id?: number
           page_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_response_formats: {
+        Row: {
+          created_at: string | null
+          format_type: string
+          id: string
+          platform: string
+          template: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          format_type: string
+          id?: string
+          platform: string
+          template: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          format_type?: string
+          id?: string
+          platform?: string
+          template?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      prompt_templates: {
+        Row: {
+          created_at: string | null
+          effectiveness_score: number | null
+          id: string
+          intent_type: string
+          is_active: boolean | null
+          language: string | null
+          name: string
+          platform: string
+          template: string
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          intent_type: string
+          is_active?: boolean | null
+          language?: string | null
+          name: string
+          platform: string
+          template: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          intent_type?: string
+          is_active?: boolean | null
+          language?: string | null
+          name?: string
+          platform?: string
+          template?: string
+          updated_at?: string | null
+          usage_count?: number | null
         }
         Relationships: []
       }

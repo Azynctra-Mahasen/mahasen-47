@@ -1,9 +1,9 @@
-
 import { PromptParams } from "../prompts/templates.ts";
 import { ConversationContext, KnowledgeBaseContext, PromptType } from "../types/prompt.ts";
 import { generateSystemPrompt } from "../prompts/templates.ts";
 import { logger } from "../utils.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { EnhancedPromptManager } from "./enhancedPromptManager.ts";
 
 // Define response schema for validation
 const PromptResponseSchema = z.object({
@@ -39,6 +39,16 @@ export class PromptManager {
       hasKnowledgeBaseContext: !!knowledgeBaseContext
     });
 
+    // Track context interaction
+    if (conversationContext?.id) {
+      await EnhancedPromptManager.trackContext({
+        conversationId: conversationContext.id,
+        contextType: 'conversation',
+        interactionCount: (conversationContext.previousMessages?.length || 0) + 1,
+        lastInteraction: new Date()
+      });
+    }
+
     // Check for conversation timeout
     if (conversationContext?.lastContextUpdate) {
       const timeoutHours = aiSettings.conversation_timeout_hours || this.CONVERSATION_TIMEOUT_HOURS;
@@ -52,24 +62,32 @@ export class PromptManager {
       }
     }
 
-    // Determine prompt type based on context and message
+    // Determine prompt type and get template
     const promptType = this.determinePromptType(message, conversationContext);
+    const platform = conversationContext?.platform || 'whatsapp';
+    const template = await EnhancedPromptManager.getPromptTemplate(
+      platform,
+      promptType,
+      aiSettings.language || 'en'
+    );
 
     // Get base prompt with system instructions
-    const systemPrompt = generateSystemPrompt({
+    const systemPrompt = template?.template || generateSystemPrompt({
       ...aiSettings,
       platform: conversationContext?.platform,
       knowledgeBase: this.formatKnowledgeBaseContext(knowledgeBaseContext)
     }, promptType);
 
-    // Add conversation history if available
+    // Add conversation history
     const conversationHistory = this.formatConversationHistory(conversationContext);
 
-    return `${systemPrompt}
+    const finalPrompt = `${systemPrompt}
 
 ${conversationHistory}
 
 Current user message: ${message}`;
+
+    return finalPrompt;
   }
 
   static validateResponse(response: unknown): boolean {
@@ -140,5 +158,13 @@ ${recentMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
     };
 
     return messages[key]?.[language] || messages[key]?.['en'] || key;
+  }
+
+  static async formatResponse(response: string, platform: string): Promise<string> {
+    return EnhancedPromptManager.formatResponse(
+      platform as PlatformType,
+      response,
+      'text'
+    );
   }
 }
