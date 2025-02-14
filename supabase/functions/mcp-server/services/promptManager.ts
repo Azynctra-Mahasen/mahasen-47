@@ -3,7 +3,7 @@ import { PromptParams } from "../prompts/templates.ts";
 import { ConversationContext, KnowledgeBaseContext, PromptType } from "../types/prompt.ts";
 import { generateSystemPrompt } from "../prompts/templates.ts";
 import { logger } from "../utils.ts";
-import { z } from "zod";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 // Define response schema for validation
 const PromptResponseSchema = z.object({
