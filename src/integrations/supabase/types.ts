@@ -375,6 +375,45 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_status: {
+        Row: {
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          last_sync_at: string | null
+          platform: string
+          retry_count: number | null
+          sync_status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          platform: string
+          retry_count?: number | null
+          sync_status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          platform?: string
+          retry_count?: number | null
+          sync_status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       ticket_history: {
         Row: {
           action: string
