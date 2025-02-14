@@ -2,6 +2,8 @@
 import { IntentAnalysis, TicketCreationInfo } from "../types/intent.ts";
 import { IntentDetectionService } from "../services/intentDetectionService.ts";
 import { initSupabase, logger } from "../utils.ts";
+import { ContextManager } from "../services/contextManager.ts";
+import { PromptManager } from "../services/promptManager.ts";
 import { createTicket } from "./ticket-processor.ts";
 
 export async function processMessage(params: {
@@ -19,9 +21,37 @@ export async function processMessage(params: {
 }> {
   logger.info('Processing message:', params);
 
+  // Get conversation context
+  const conversationContext = await ContextManager.getConversationContext(params.conversationId);
+  
+  // Get knowledge base context
+  const knowledgeBaseContext = await ContextManager.getKnowledgeBaseContext(params.message);
+
+  // Get AI settings
+  const { data: aiSettings } = await initSupabase()
+    .from('ai_settings')
+    .select('*')
+    .single();
+
+  if (!aiSettings) {
+    throw new Error('AI settings not found');
+  }
+
+  // Generate prompt
+  const prompt = PromptManager.generatePrompt(
+    params.message,
+    conversationContext,
+    knowledgeBaseContext,
+    {
+      tone: aiSettings.tone,
+      behaviour: aiSettings.behaviour
+    }
+  );
+
+  // Analyze intent with enhanced context
   const analysis = await IntentDetectionService.analyzeIntent(
     params.message,
-    params.knowledgeBaseContext,
+    prompt,
     params.previousMessages
   );
 
@@ -53,6 +83,14 @@ export async function processMessage(params: {
     if (ticketResult.success) {
       ticketId = ticketResult.ticketId;
     }
+  }
+
+  // Update order state if this is an order-related intent
+  if (analysis.intent === 'ORDER_PLACEMENT' && analysis.detected_entities.order_info) {
+    await ContextManager.updateOrderState(
+      params.conversationId,
+      analysis.detected_entities.order_info
+    );
   }
 
   return { analysis, ticketInfo, ticketId };
