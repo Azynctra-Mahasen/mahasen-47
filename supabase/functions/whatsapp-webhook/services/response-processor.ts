@@ -1,9 +1,9 @@
 
-import { IntentProcessor } from './intent-processor.ts';
-
 export class ResponseProcessor {
   static async processAIResponse(rawResponse: string, userMessage?: string): Promise<any> {
     try {
+      console.log('Processing AI response:', rawResponse);
+      
       let cleanedResponse = rawResponse
         .replace(/<think>[\s\S]*?<\/think>/g, '')
         .replace(/```json\n/g, '')
@@ -20,11 +20,20 @@ export class ResponseProcessor {
 
       // Process order info if present
       if (parsedResponse.intent === 'ORDER_PLACEMENT') {
-        parsedResponse.detected_entities.order_info = 
-          IntentProcessor.processOrderInfo(
-            parsedResponse.detected_entities.order_info,
-            userMessage
-          );
+        console.log('Processing order placement:', {
+          originalOrderInfo: parsedResponse.detected_entities.order_info,
+          userMessage
+        });
+
+        const processedOrderInfo = IntentProcessor.processOrderInfo(
+          parsedResponse.detected_entities.order_info,
+          userMessage
+        );
+
+        console.log('Processed order info:', processedOrderInfo);
+
+        // Update the response with processed order info
+        parsedResponse.detected_entities.order_info = processedOrderInfo;
       }
 
       return parsedResponse;
