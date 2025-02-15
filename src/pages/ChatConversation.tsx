@@ -75,17 +75,25 @@ const ChatConversation = () => {
   };
 
   const handleClearChat = async () => {
-    if (!id) return;
+    if (!id) {
+      toast.error("Invalid conversation ID");
+      return;
+    }
     
     try {
+      console.log('Attempting to delete messages for conversation:', id);
       const { error } = await supabase
         .from('messages')
         .delete()
         .eq('conversation_id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database deletion error:', error);
+        throw error;
+      }
 
-      refetchMessages();
+      console.log('Messages deleted successfully');
+      await refetchMessages();
       setIsCleared(true);
       toast.success("Chat history cleared successfully");
     } catch (error) {
