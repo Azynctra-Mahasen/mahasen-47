@@ -1,8 +1,10 @@
+
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { FileUploader } from "@/components/knowledge-base/FileUploader";
 import { FileList } from "@/components/knowledge-base/FileList";
+import { ProductsSection } from "@/components/knowledge-base/ProductsSection";
 import { useQueryClient } from "@tanstack/react-query";
 
 const KnowledgeBase = () => {
@@ -34,6 +36,8 @@ const KnowledgeBase = () => {
           <h2 className="text-lg font-semibold mb-4">Your Files</h2>
           <FileList />
         </div>
+
+        <ProductsSection />
       </div>
     </div>
   );
