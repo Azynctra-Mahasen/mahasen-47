@@ -1,6 +1,5 @@
-
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -8,7 +7,7 @@ import { MessageInput } from "@/components/chat/MessageInput";
 import { useConversation } from "@/components/chat/useConversation";
 import { useMessageSending } from "@/components/chat/useMessageSending";
 import { useRealtimeMessages } from "@/components/chat/useRealtimeMessages";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, Trash2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -25,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const ChatConversation = () => {
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [newMessage, setNewMessage] = useState("");
   const [isAIEnabled, setIsAIEnabled] = useState<boolean | null>(null);
@@ -117,6 +117,17 @@ const ChatConversation = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col relative">
       <div className="fixed top-0 left-0 right-0 z-10">
+        <div className="bg-white dark:bg-slate-900 border-b p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </div>
         <ChatHeader
           contactName={conversation?.contact_name}
           platform={conversation?.platform}
@@ -156,7 +167,7 @@ const ChatConversation = () => {
 
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 mt-16 mb-24"
+        className="flex-1 overflow-y-auto p-4 mt-32 mb-24"
       >
         <div className="max-w-4xl mx-auto space-y-4">
           {messages?.length === 0 || isCleared ? (
