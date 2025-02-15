@@ -37,6 +37,17 @@ async function processMessageBatch(
       const aiSettings = await getAISettings();
       console.log('Using AI settings:', aiSettings);
 
+      // Get messenger settings
+      const { data: messengerSettings, error: settingsError } = await supabase
+        .from('messenger_settings')
+        .select('access_token')
+        .single();
+
+      if (settingsError || !messengerSettings) {
+        console.error('Error fetching messenger settings:', settingsError);
+        throw new Error('Failed to fetch messenger settings');
+      }
+
       const aiResponse = await generateAIResponse(batchedMessage, {
         messageId: whatsappMessageId,
         conversationId: conversationId,
@@ -44,7 +55,7 @@ async function processMessageBatch(
         knowledgeBase: ''
       }, aiSettings);
 
-      await sendFacebookMessage(userId, aiResponse, settings.access_token);
+      await sendFacebookMessage(userId, aiResponse, messengerSettings.access_token);
       
       // Store AI response in database
       await supabase.from('messages').insert({
