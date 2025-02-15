@@ -366,6 +366,42 @@ export type Database = {
         }
         Relationships: []
       }
+      products: {
+        Row: {
+          created_at: string | null
+          description: string
+          discounts: number | null
+          embedding: string | null
+          embedding_status: string | null
+          id: string
+          price: number
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description: string
+          discounts?: number | null
+          embedding?: string | null
+          embedding_status?: string | null
+          id?: string
+          price: number
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string
+          discounts?: number | null
+          embedding?: string | null
+          embedding_status?: string | null
+          id?: string
+          price?: number
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       prompt_templates: {
         Row: {
           created_at: string | null
