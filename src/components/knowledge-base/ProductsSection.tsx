@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Edit } from "lucide-react";
@@ -31,6 +30,11 @@ export const ProductsSection = () => {
       return data as Product[];
     }
   });
+
+  const trimDescription = (description: string, maxLength: number = 20) => {
+    if (description.length <= maxLength) return description;
+    return `${description.slice(0, maxLength)}...`;
+  };
 
   const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
@@ -73,7 +77,7 @@ export const ProductsSection = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">{product.description}</p>
+              <p className="text-sm text-muted-foreground mb-4">{trimDescription(product.description)}</p>
               <div className="space-y-1">
                 <p className="text-lg font-semibold">
                   ${product.price.toFixed(2)}

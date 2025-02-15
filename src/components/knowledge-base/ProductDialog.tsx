@@ -69,6 +69,12 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
   }, [product, form]);
 
   const generateEmbedding = async (text: string) => {
+    console.log('Generating embedding for:', text);
+    toast({
+      title: "Processing",
+      description: "Generating embedding...",
+    });
+
     const { data: embeddingData, error: embeddingError } = await supabase.functions.invoke(
       'generate-file-embedding',
       {
@@ -77,21 +83,46 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
     );
 
     if (embeddingError) throw embeddingError;
+    console.log('Embedding generated successfully');
     return embeddingData.embedding;
+  };
+
+  const removeExistingEmbedding = async (productId: string) => {
+    console.log('Removing existing embedding for product:', productId);
+    toast({
+      title: "Processing",
+      description: "Removing existing embedding...",
+    });
+
+    const { error } = await supabase
+      .from('products')
+      .update({
+        embedding: null,
+        embedding_status: 'pending'
+      })
+      .eq('id', productId);
+
+    if (error) throw error;
+    console.log('Existing embedding removed successfully');
   };
 
   const onSubmit = async (values: ProductFormValues) => {
     setIsSubmitting(true);
     try {
-      // Generate embedding for title + description
       const textToEmbed = `${values.title} ${values.description}`;
-      console.log('Generating embedding for:', textToEmbed);
-      
-      const embedding = await generateEmbedding(textToEmbed);
-      console.log('Embedding generated successfully');
 
       if (isEditing && product) {
-        // Update existing product
+        // First remove existing embedding
+        await removeExistingEmbedding(product.id);
+        
+        // Generate new embedding
+        const embedding = await generateEmbedding(textToEmbed);
+        toast({
+          title: "Processing",
+          description: "Updating product with new embedding...",
+        });
+
+        // Update product with new data and embedding
         const { error: updateError } = await supabase
           .from('products')
           .update({
@@ -108,10 +139,16 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
 
         toast({
           title: "Success",
-          description: "Product updated successfully",
+          description: "Product updated successfully with new embedding",
         });
       } else {
-        // Insert new product
+        // For new products, generate embedding and insert
+        const embedding = await generateEmbedding(textToEmbed);
+        toast({
+          title: "Processing",
+          description: "Creating new product with embedding...",
+        });
+
         const { error: insertError } = await supabase
           .from('products')
           .insert({
@@ -127,7 +164,7 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
 
         toast({
           title: "Success",
-          description: "Product created successfully",
+          description: "Product created successfully with embedding",
         });
       }
 
