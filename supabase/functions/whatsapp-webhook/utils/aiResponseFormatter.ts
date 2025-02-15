@@ -1,57 +1,107 @@
+
 export function formatAIResponse(responseText: string): any {
   try {
-    // Remove <think> tags and their content
-    let cleanedResponse = responseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    console.log('Formatting AI response. Raw input:', responseText);
     
-    // Remove ```json and ``` markers if they exist
-    cleanedResponse = cleanedResponse.replace(/```json\n/g, '').replace(/```/g, '').trim();
+    // Handle empty or undefined input
+    if (!responseText) {
+      console.error('Empty or undefined response text');
+      return getDefaultFormattedResponse('Empty response');
+    }
+
+    // Remove <think> tags and their content
+    let cleanedResponse = responseText
+      .replace(/<think>[\s\S]*?<\/think>/g, '')
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .replace(/^\s+|\s+$/g, '')
+      .replace(/\\n/g, ' ')
+      .replace(/\n/g, ' ')
+      .replace(/\s+/g, ' ');
+    
+    console.log('Cleaned response:', cleanedResponse);
+    
+    // Try to extract JSON if embedded in text
+    let jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedResponse = jsonMatch[0];
+      console.log('Extracted JSON:', cleanedResponse);
+    }
     
     // Parse the JSON
     const parsedResponse = JSON.parse(cleanedResponse);
+    console.log('Parsed response:', parsedResponse);
     
-    console.log('Parsed AI response:', parsedResponse);
-    
-    // If we just want to return the response text
-    if (parsedResponse.response) {
-      return parsedResponse;
+    if (!isValidAIResponse(parsedResponse)) {
+      console.error('Invalid AI response structure:', parsedResponse);
+      return getDefaultFormattedResponse('Invalid response structure');
     }
     
-    // Fallback to returning the full parsed response
     return parsedResponse;
   } catch (error) {
     console.error('Error formatting AI response:', error);
-    console.log('Raw response:', responseText);
-    
-    // Return a default response structure if parsing fails
-    return {
-      response: responseText,
-      intent: 'GENERAL_QUERY',
-      confidence: 0.5,
-      requires_escalation: false,
-      escalation_reason: null,
-      detected_entities: {
-        product_mentions: [],
-        issue_type: null,
-        urgency_level: 'low',
-        order_info: null
-      }
-    };
+    console.error('Raw response that caused error:', responseText);
+    return getDefaultFormattedResponse(`Formatting error: ${error.message}`);
   }
 }
 
 export function isValidAIResponse(response: any): boolean {
-  return (
-    response &&
-    typeof response.intent === 'string' &&
-    typeof response.confidence === 'number' &&
-    typeof response.requires_escalation === 'boolean' &&
-    (response.escalation_reason === null || typeof response.escalation_reason === 'string') &&
-    response.detected_entities &&
-    typeof response.response === 'string' &&
-    Array.isArray(response.detected_entities.product_mentions) &&
-    (response.detected_entities.issue_type === null || typeof response.detected_entities.issue_type === 'string') &&
-    ['low', 'medium', 'high'].includes(response.detected_entities.urgency_level)
-  );
+  if (!response || typeof response !== 'object') {
+    console.error('Response is not an object');
+    return false;
+  }
+
+  const requiredFields = {
+    response: 'string',
+    intent: 'string',
+    confidence: 'number',
+    requires_escalation: 'boolean',
+    detected_entities: 'object'
+  };
+
+  for (const [field, type] of Object.entries(requiredFields)) {
+    if (!(field in response)) {
+      console.error(`Missing required field: ${field}`);
+      return false;
+    }
+    if (typeof response[field] !== type) {
+      console.error(`Invalid type for ${field}. Expected ${type}, got ${typeof response[field]}`);
+      return false;
+    }
+  }
+
+  if (!response.detected_entities.hasOwnProperty('product_mentions')) {
+    console.error('Missing product_mentions in detected_entities');
+    return false;
+  }
+
+  if (!Array.isArray(response.detected_entities.product_mentions)) {
+    console.error('product_mentions is not an array');
+    return false;
+  }
+
+  if (!['low', 'medium', 'high'].includes(response.detected_entities.urgency_level)) {
+    console.error('Invalid urgency_level');
+    return false;
+  }
+
+  return true;
+}
+
+function getDefaultFormattedResponse(reason: string = 'Unknown error'): any {
+  return {
+    response: `I apologize, but I encountered an error: ${reason}. Please try again.`,
+    intent: 'GENERAL_QUERY',
+    confidence: 0.5,
+    requires_escalation: false,
+    escalation_reason: null,
+    detected_entities: {
+      product_mentions: [],
+      issue_type: null,
+      urgency_level: 'low',
+      order_info: null
+    }
+  };
 }
 
 // Helper function to extract just the response text
