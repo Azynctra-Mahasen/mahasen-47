@@ -52,6 +52,7 @@ export type Database = {
           model_name: Database["public"]["Enums"]["ai_model"]
           tone: Database["public"]["Enums"]["ai_tone"]
           updated_at: string
+          use_mcp: boolean | null
         }
         Insert: {
           behaviour?: string | null
@@ -62,6 +63,7 @@ export type Database = {
           model_name?: Database["public"]["Enums"]["ai_model"]
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
+          use_mcp?: boolean | null
         }
         Update: {
           behaviour?: string | null
@@ -72,8 +74,88 @@ export type Database = {
           model_name?: Database["public"]["Enums"]["ai_model"]
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
+          use_mcp?: boolean | null
         }
         Relationships: []
+      }
+      context_tracking: {
+        Row: {
+          context_type: string
+          conversation_id: string | null
+          created_at: string | null
+          effectiveness_score: number | null
+          id: string
+          interaction_count: number | null
+          last_interaction: string | null
+          sentiment: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          context_type: string
+          conversation_id?: string | null
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          interaction_count?: number | null
+          last_interaction?: string | null
+          sentiment?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          context_type?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          interaction_count?: number | null
+          last_interaction?: string | null
+          sentiment?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "context_tracking_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_contexts: {
+        Row: {
+          context_data: Json
+          context_type: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          context_data: Json
+          context_type: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          context_data?: Json
+          context_type?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_contexts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversations: {
         Row: {
@@ -82,6 +164,8 @@ export type Database = {
           contact_number: string
           created_at: string | null
           id: string
+          last_context_update: string | null
+          metadata: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at: string | null
         }
@@ -91,6 +175,8 @@ export type Database = {
           contact_number: string
           created_at?: string | null
           id?: string
+          last_context_update?: string | null
+          metadata?: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
         }
@@ -100,6 +186,8 @@ export type Database = {
           contact_number?: string
           created_at?: string | null
           id?: string
+          last_context_update?: string | null
+          metadata?: Json | null
           platform?: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
         }
@@ -107,38 +195,47 @@ export type Database = {
       }
       knowledge_base_files: {
         Row: {
+          category: string | null
           content: string | null
           content_type: string
           created_at: string
           embedding: string | null
+          embedding_status: string | null
           file_path: string
           filename: string
           fts: unknown | null
           id: string
+          metadata: Json | null
           size: number
           user_id: string
         }
         Insert: {
+          category?: string | null
           content?: string | null
           content_type: string
           created_at?: string
           embedding?: string | null
+          embedding_status?: string | null
           file_path: string
           filename: string
           fts?: unknown | null
           id?: string
+          metadata?: Json | null
           size: number
           user_id: string
         }
         Update: {
+          category?: string | null
           content?: string | null
           content_type?: string
           created_at?: string
           embedding?: string | null
+          embedding_status?: string | null
           file_path?: string
           filename?: string
           fts?: unknown | null
           id?: string
+          metadata?: Json | null
           size?: number
           user_id?: string
         }
@@ -150,6 +247,7 @@ export type Database = {
           conversation_id: string | null
           created_at: string | null
           id: string
+          order_info: Json | null
           read: boolean | null
           sender_name: string
           sender_number: string
@@ -161,6 +259,7 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          order_info?: Json | null
           read?: boolean | null
           sender_name: string
           sender_number: string
@@ -172,6 +271,7 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          order_info?: Json | null
           read?: boolean | null
           sender_name?: string
           sender_number?: string
@@ -209,6 +309,174 @@ export type Database = {
           id?: number
           page_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      performance_metrics: {
+        Row: {
+          details: Json | null
+          endpoint_name: string
+          id: string
+          response_time: number
+          success: boolean
+          timestamp: string | null
+        }
+        Insert: {
+          details?: Json | null
+          endpoint_name: string
+          id?: string
+          response_time: number
+          success: boolean
+          timestamp?: string | null
+        }
+        Update: {
+          details?: Json | null
+          endpoint_name?: string
+          id?: string
+          response_time?: number
+          success?: boolean
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
+      platform_response_formats: {
+        Row: {
+          created_at: string | null
+          format_type: string
+          id: string
+          platform: string
+          template: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          format_type: string
+          id?: string
+          platform: string
+          template: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          format_type?: string
+          id?: string
+          platform?: string
+          template?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      prompt_templates: {
+        Row: {
+          created_at: string | null
+          effectiveness_score: number | null
+          id: string
+          intent_type: string
+          is_active: boolean | null
+          language: string | null
+          name: string
+          platform: string
+          template: string
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          intent_type: string
+          is_active?: boolean | null
+          language?: string | null
+          name: string
+          platform: string
+          template: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          intent_type?: string
+          is_active?: boolean | null
+          language?: string | null
+          name?: string
+          platform?: string
+          template?: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
+      sync_status: {
+        Row: {
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          last_sync_at: string | null
+          platform: string
+          retry_count: number | null
+          sync_status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          platform: string
+          retry_count?: number | null
+          sync_status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          platform?: string
+          retry_count?: number | null
+          sync_status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_logs: {
+        Row: {
+          component: string
+          error_code: string | null
+          id: string
+          log_level: string
+          message: string
+          metadata: Json | null
+          stack_trace: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          component: string
+          error_code?: string | null
+          id?: string
+          log_level: string
+          message: string
+          metadata?: Json | null
+          stack_trace?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          component?: string
+          error_code?: string | null
+          id?: string
+          log_level?: string
+          message?: string
+          metadata?: Json | null
+          stack_trace?: string | null
+          timestamp?: string | null
         }
         Relationships: []
       }
@@ -340,6 +608,33 @@ export type Database = {
           },
         ]
       }
+      usage_stats: {
+        Row: {
+          action_type: string
+          details: Json | null
+          feature_name: string
+          id: string
+          timestamp: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          details?: Json | null
+          feature_name: string
+          id?: string
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          details?: Json | null
+          feature_name?: string
+          id?: string
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_preferences: {
         Row: {
           created_at: string
@@ -393,7 +688,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      error_summary: {
+        Row: {
+          component: string | null
+          error_count: number | null
+          log_level: string | null
+          time_bucket: string | null
+        }
+        Relationships: []
+      }
+      error_trends: {
+        Row: {
+          affected_components: number | null
+          change_percentage: number | null
+          day: string | null
+          error_count: number | null
+          log_level: string | null
+        }
+        Relationships: []
+      }
+      performance_summary: {
+        Row: {
+          avg_response_time: number | null
+          endpoint_name: string | null
+          max_response_time: number | null
+          min_response_time: number | null
+          success_rate: number | null
+          successful_requests: number | null
+          time_bucket: string | null
+          total_requests: number | null
+        }
+        Relationships: []
+      }
+      usage_summary: {
+        Row: {
+          action_type: string | null
+          day: string | null
+          feature_name: string | null
+          unique_users: number | null
+          usage_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       match_knowledge_base: {
