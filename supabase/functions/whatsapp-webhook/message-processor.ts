@@ -4,9 +4,12 @@ import { storeConversation } from "./database.ts";
 import { generateAIResponse } from "./ollama.ts";
 import { MessageBatcherService } from "./services/message-batcher.ts";
 import { getAISettings } from "./ai-settings.ts";
+import { sendWhatsAppMessage } from "./whatsapp.ts";
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+const WHATSAPP_PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function processMessageBatch(
@@ -26,7 +29,7 @@ async function processMessageBatch(
 
     const { data: conversation } = await supabase
       .from('conversations')
-      .select('ai_enabled')
+      .select('ai_enabled, contact_number')
       .eq('id', conversationId)
       .single();
 
@@ -49,6 +52,16 @@ async function processMessageBatch(
         sender_number: 'system',
         status: 'sent',
       });
+
+      // Send the WhatsApp message
+      if (conversation.contact_number) {
+        await sendWhatsAppMessage(
+          conversation.contact_number,
+          aiResponse,
+          WHATSAPP_ACCESS_TOKEN,
+          WHATSAPP_PHONE_ID
+        );
+      }
     }
   } catch (error) {
     console.error('Error processing batched message:', error);
