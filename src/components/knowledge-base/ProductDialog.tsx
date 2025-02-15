@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,31 +14,59 @@ import { supabase } from "@/integrations/supabase/client";
 const productSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
-  price: z.string().min(1, "Price is required").transform((val) => parseFloat(val)),
-  discounts: z.string().optional().transform((val) => val ? parseFloat(val) : null),
+  price: z.number().min(0, "Price must be positive"),
+  discounts: z.number().min(0).nullable(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
+
+interface Product {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  discounts?: number | null;
+}
 
 interface ProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  product?: Product | null;
 }
 
-export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogProps) {
+export function ProductDialog({ open, onOpenChange, onSuccess, product }: ProductDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const isEditing = !!product;
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
       title: "",
       description: "",
-      price: "", // This is correct as a string since our schema handles the conversion
-      discounts: "", // This is correct as a string since our schema handles the conversion
+      price: 0,
+      discounts: null,
     },
   });
+
+  useEffect(() => {
+    if (product) {
+      form.reset({
+        title: product.title,
+        description: product.description,
+        price: product.price,
+        discounts: product.discounts || null,
+      });
+    } else {
+      form.reset({
+        title: "",
+        description: "",
+        price: 0,
+        discounts: null,
+      });
+    }
+  }, [product, form]);
 
   const generateEmbedding = async (text: string) => {
     const { data: embeddingData, error: embeddingError } = await supabase.functions.invoke(
@@ -62,36 +90,56 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
       const embedding = await generateEmbedding(textToEmbed);
       console.log('Embedding generated successfully');
 
-      // Insert product with embedding
-      const { data: product, error: insertError } = await supabase
-        .from('products')
-        .insert({
-          title: values.title,
-          description: values.description,
-          price: values.price, // This is now a number thanks to the schema transformation
-          discounts: values.discounts, // This is now a number or null thanks to the schema transformation
-          embedding,
-          embedding_status: 'completed'
-        })
-        .select()
-        .single();
+      if (isEditing && product) {
+        // Update existing product
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({
+            title: values.title,
+            description: values.description,
+            price: values.price,
+            discounts: values.discounts,
+            embedding,
+            embedding_status: 'completed'
+          })
+          .eq('id', product.id);
 
-      if (insertError) throw insertError;
+        if (updateError) throw updateError;
 
-      toast({
-        title: "Success",
-        description: "Product created successfully",
-      });
+        toast({
+          title: "Success",
+          description: "Product updated successfully",
+        });
+      } else {
+        // Insert new product
+        const { error: insertError } = await supabase
+          .from('products')
+          .insert({
+            title: values.title,
+            description: values.description,
+            price: values.price,
+            discounts: values.discounts,
+            embedding,
+            embedding_status: 'completed'
+          });
+
+        if (insertError) throw insertError;
+
+        toast({
+          title: "Success",
+          description: "Product created successfully",
+        });
+      }
 
       form.reset();
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      console.error('Error creating product:', error);
+      console.error('Error saving product:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create product. Please try again.",
+        description: `Failed to ${isEditing ? 'update' : 'create'} product. Please try again.`,
       });
     } finally {
       setIsSubmitting(false);
@@ -102,7 +150,7 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New Product</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit Product' : 'Add New Product'}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -137,11 +185,17 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
             <FormField
               control={form.control}
               name="price"
-              render={({ field }) => (
+              render={({ field: { onChange, ...field }}) => (
                 <FormItem>
                   <FormLabel>Price</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      onChange={e => onChange(parseFloat(e.target.value))}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -151,11 +205,18 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
             <FormField
               control={form.control}
               name="discounts"
-              render={({ field }) => (
+              render={({ field: { onChange, value, ...field }}) => (
                 <FormItem>
                   <FormLabel>Discounts (Optional)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      onChange={e => onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                      value={value || ""}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -164,10 +225,13 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
+                {isEditing ? "Discard" : "Cancel"}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create Product"}
+                {isSubmitting ? 
+                  (isEditing ? "Updating..." : "Creating...") : 
+                  (isEditing ? "Save" : "Create Product")
+                }
               </Button>
             </DialogFooter>
           </form>
