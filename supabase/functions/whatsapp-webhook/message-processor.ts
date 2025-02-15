@@ -72,6 +72,7 @@ export async function processWhatsAppMessage(
 
     // If this is an order placement showing summary, store the context
     if (isOrderSummary(aiResponse)) {
+      console.log('Storing pending order:', aiResponse.detected_entities.order_info);
       await OrderProcessor.storePendingOrder(
         userId,
         aiResponse.detected_entities.order_info
