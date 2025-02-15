@@ -16,6 +16,8 @@ export class TicketHandler {
     analysis: any,
     context: TicketContext
   ): Promise<string | null> {
+    console.log('Handling ticket creation with analysis:', analysis);
+
     // Handle order tickets
     if (analysis.intent === 'ORDER_PLACEMENT' &&
         analysis.detected_entities.order_info?.state === 'PROCESSING' &&
@@ -33,7 +35,7 @@ export class TicketHandler {
 
   private static async createOrderTicket(analysis: any, context: TicketContext): Promise<string> {
     const orderInfo = analysis.detected_entities.order_info;
-    console.log('Creating order ticket...');
+    console.log('Creating order ticket with info:', orderInfo);
     
     try {
       const ticket = await AutomatedTicketService.generateTicket({

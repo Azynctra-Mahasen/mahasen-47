@@ -5,6 +5,7 @@ import { sendWhatsAppMessage } from './whatsapp.ts';
 import { storeConversation } from './database.ts';
 import { getAISettings } from './ai-settings.ts';
 import { extractResponseText } from './utils/aiResponseFormatter.ts';
+import { TicketHandler } from './services/ticket-handler.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -24,6 +25,64 @@ export async function processWhatsAppMessage(
   });
 
   try {
+    // Check for pending order confirmation first
+    const { data: pendingOrder } = await supabase
+      .from('conversation_contexts')
+      .select('*')
+      .eq('conversation_id', userId)
+      .eq('context_type', 'pending_order')
+      .single();
+
+    // If there's a pending order and user confirms
+    if (pendingOrder && isConfirmationMessage(userMessage)) {
+      console.log('Processing order confirmation for pending order:', pendingOrder);
+      
+      const orderInfo = JSON.parse(pendingOrder.context);
+      const ticketResponse = await TicketHandler.handleTicketCreation(
+        {
+          intent: 'ORDER_PLACEMENT',
+          confidence: 1,
+          requires_escalation: false,
+          escalation_reason: null,
+          detected_entities: {
+            product_mentions: [orderInfo.product],
+            issue_type: null,
+            urgency_level: 'medium',
+            order_info: {
+              product: orderInfo.product,
+              quantity: orderInfo.quantity,
+              state: 'PROCESSING',
+              confirmed: true
+            }
+          }
+        },
+        {
+          messageId: whatsappMessageId,
+          conversationId: userId,
+          userName,
+          platform: 'whatsapp',
+          messageContent: userMessage
+        }
+      );
+
+      // Clear the pending order context
+      await supabase
+        .from('conversation_contexts')
+        .delete()
+        .eq('id', pendingOrder.id);
+
+      // Send the ticket response
+      if (ticketResponse) {
+        await sendWhatsAppMessage(
+          userId,
+          ticketResponse,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+          Deno.env.get('WHATSAPP_PHONE_ID')!
+        );
+        return;
+      }
+    }
+
     // Get conversation ID first
     const { data: conversation, error: convError } = await supabase
       .from("conversations")
@@ -54,21 +113,7 @@ export async function processWhatsAppMessage(
       conversationId = conversation.id;
     }
 
-    console.log('Found/created conversation:', conversationId);
-
-    // Check if message with this WhatsApp ID already exists
-    const { data: existingMessage } = await supabase
-      .from("messages")
-      .select("id")
-      .eq("whatsapp_message_id", whatsappMessageId)
-      .single();
-
-    if (existingMessage) {
-      console.log('Message already exists, skipping processing:', whatsappMessageId);
-      return;
-    }
-
-    // Create a message record for the user's message
+    // Store the user's message
     const { data: messageData, error: messageError } = await supabase
       .from("messages")
       .insert({
@@ -87,11 +132,10 @@ export async function processWhatsAppMessage(
       throw messageError;
     }
 
-    // Fetch AI settings and conversation history
+    // Get AI settings and generate response
     const aiSettings = await getAISettings();
     const conversationHistory = await getRecentConversationHistory(userId, aiSettings);
 
-    // Create context object with all required fields
     const context = {
       userName,
       messageId: messageData.id,
@@ -101,28 +145,34 @@ export async function processWhatsAppMessage(
       platform: 'whatsapp' as const
     };
 
-    console.log('Prepared context for AI response:', context);
-
-    // Generate AI response
     const aiResponse = await generateAIResponse(userMessage, context, aiSettings);
-    console.log('Generated AI response:', aiResponse);
-
-    // Extract only the response text from the AI response
     const responseText = extractResponseText(aiResponse);
-    console.log('Extracted response text:', responseText);
+
+    // If this is an order placement showing summary, store the context
+    if (isOrderSummary(aiResponse)) {
+      await supabase
+        .from('conversation_contexts')
+        .insert({
+          conversation_id: userId,
+          context_type: 'pending_order',
+          context: JSON.stringify(aiResponse.detected_entities.order_info)
+        });
+    }
 
     // Send WhatsApp response
-    const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
-    const WHATSAPP_PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID')!;
-    await sendWhatsAppMessage(userId, responseText, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_ID);
+    await sendWhatsAppMessage(
+      userId,
+      responseText,
+      Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+      Deno.env.get('WHATSAPP_PHONE_ID')!
+    );
 
-    // Store only the AI response
+    // Store the conversation
     await storeConversation(supabase, userId, userName, userMessage, responseText);
 
   } catch (error) {
     console.error('Error in message processing:', error);
     
-    // Log error to webhook_errors table
     try {
       await supabase.from('webhook_errors').insert({
         error_type: 'WHATSAPP_WEBHOOK_ERROR',
@@ -140,6 +190,19 @@ export async function processWhatsAppMessage(
     
     throw error;
   }
+}
+
+function isConfirmationMessage(message: string): boolean {
+  const confirmationWords = ['yes', 'ow', 'ඔව්'];
+  return confirmationWords.includes(message.toLowerCase().trim());
+}
+
+function isOrderSummary(aiResponse: any): boolean {
+  return (
+    aiResponse.intent === 'ORDER_PLACEMENT' &&
+    aiResponse.detected_entities?.order_info?.state === 'CONFIRMING' &&
+    !aiResponse.detected_entities?.order_info?.confirmed
+  );
 }
 
 async function getRecentConversationHistory(userId: string, aiSettings: any): Promise<string> {
