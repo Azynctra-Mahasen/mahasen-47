@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { TicketHandler } from './ticket-handler.ts';
 import { sendWhatsAppMessage } from '../whatsapp.ts';
+import { getExactProduct } from './knowledge-base.ts';
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -14,6 +15,14 @@ interface OrderContext {
   userName: string;
   whatsappMessageId: string;
   userMessage: string;
+}
+
+interface OrderInfo {
+  product: string;
+  product_id: string;
+  quantity: number;
+  state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING' | 'COMPLETED';
+  confirmed: boolean;
 }
 
 export class OrderProcessor {
@@ -31,7 +40,33 @@ export class OrderProcessor {
 
     console.log('Processing order confirmation for pending order:', pendingOrder);
     
-    const orderInfo = JSON.parse(pendingOrder.context);
+    const orderInfo: OrderInfo = JSON.parse(pendingOrder.context);
+    
+    // Verify product still exists and matches exactly
+    const exactProduct = await getExactProduct(orderInfo.product);
+    if (!exactProduct) {
+      console.error('Product verification failed - product no longer exists or has changed');
+      await sendWhatsAppMessage(
+        context.userId,
+        "Sorry, there seems to be an issue with the product. Please try placing your order again.",
+        Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+        Deno.env.get('WHATSAPP_PHONE_ID')!
+      );
+      return true;
+    }
+
+    // Verify product ID matches
+    if (exactProduct.metadata.product_id !== orderInfo.product_id) {
+      console.error('Product ID mismatch detected');
+      await sendWhatsAppMessage(
+        context.userId,
+        "Sorry, there seems to be an issue with the product. Please try placing your order again.",
+        Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+        Deno.env.get('WHATSAPP_PHONE_ID')!
+      );
+      return true;
+    }
+
     const ticketResponse = await TicketHandler.handleTicketCreation(
       {
         intent: 'ORDER_PLACEMENT',
@@ -43,8 +78,7 @@ export class OrderProcessor {
           issue_type: null,
           urgency_level: 'medium',
           order_info: {
-            product: orderInfo.product,
-            quantity: orderInfo.quantity,
+            ...orderInfo,
             state: 'PROCESSING',
             confirmed: true
           }
@@ -65,7 +99,6 @@ export class OrderProcessor {
       .delete()
       .eq('id', pendingOrder.id);
 
-    // Send the ticket response if available
     if (ticketResponse) {
       await sendWhatsAppMessage(
         context.userId,
@@ -80,12 +113,25 @@ export class OrderProcessor {
   }
 
   static async storePendingOrder(userId: string, orderInfo: any): Promise<void> {
+    // Verify product exists and get exact match before storing
+    const exactProduct = await getExactProduct(orderInfo.product);
+    if (!exactProduct) {
+      throw new Error('Product not found or invalid');
+    }
+
+    // Add product ID to order info
+    const verifiedOrderInfo = {
+      ...orderInfo,
+      product_id: exactProduct.metadata.product_id,
+      product: exactProduct.metadata.title // Use exact product title
+    };
+
     await supabase
       .from('conversation_contexts')
       .insert({
         conversation_id: userId,
         context_type: 'pending_order',
-        context: JSON.stringify(orderInfo)
+        context: JSON.stringify(verifiedOrderInfo)
       });
   }
 

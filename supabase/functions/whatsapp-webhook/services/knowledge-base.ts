@@ -13,6 +13,7 @@ export interface SearchResult {
     price?: number;
     discounts?: number;
     title?: string;
+    product_id?: string;
   };
 }
 
@@ -52,6 +53,44 @@ export async function searchKnowledgeBase(
   } catch (error) {
     console.error('Error in knowledge base search:', error);
     return [];
+  }
+}
+
+export async function getExactProduct(productName: string): Promise<SearchResult | null> {
+  try {
+    console.log('Searching for exact product match:', productName);
+    
+    const { data: product, error } = await supabase
+      .from('products')
+      .select('id, title, description, price, discounts')
+      .eq('title', productName)
+      .single();
+
+    if (error) {
+      console.error('Error finding exact product:', error);
+      return null;
+    }
+
+    if (!product) {
+      console.log('No exact product match found');
+      return null;
+    }
+
+    return {
+      id: product.id,
+      content: product.description,
+      similarity: 1,
+      source: 'product',
+      metadata: {
+        price: product.price,
+        discounts: product.discounts,
+        title: product.title,
+        product_id: product.id
+      }
+    };
+  } catch (error) {
+    console.error('Error in exact product search:', error);
+    return null;
   }
 }
 
