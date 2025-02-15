@@ -54,12 +54,14 @@ async function generateGroqResponse(message: string, context: any, aiSettings: a
   });
 
   try {
+    console.log('Generating Groq response with prompt:', systemPrompt);
     const parsedResponse = await GroqHandler.generateResponse(
       message,
       systemPrompt,
       GROQ_API_KEY,
       aiSettings.model_name
     );
+    console.log('Raw Groq response:', parsedResponse);
 
     const ticketResponse = await TicketHandler.handleTicketCreation(parsedResponse, {
       messageId: context.messageId,
@@ -94,11 +96,13 @@ async function generateGeminiResponse(message: string, context: any, aiSettings:
   });
 
   try {
+    console.log('Generating Gemini response with prompt:', intentDetectionPrompt);
     const parsedResponse = await GeminiHandler.generateResponse(
       message,
       intentDetectionPrompt,
       GEMINI_API_KEY
     );
+    console.log('Raw Gemini response:', parsedResponse);
 
     const ticketResponse = await TicketHandler.handleTicketCreation(parsedResponse, {
       messageId: context.messageId,
