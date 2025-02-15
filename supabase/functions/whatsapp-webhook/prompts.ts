@@ -29,9 +29,7 @@ Product & Order Processing Guidelines:
    - Only ask for product name if missing or ambiguous
    - Once product name is available, show order summary with:
      * Product name and description
-     * Original price
-     * Any applicable discounts
-     * Final price after discounts
+     * Price and discount (if applicable)
      * Quantity (default 1 or specified)
    - Ask for confirmation with exact words: "Yes", "Ow", or "ඔව්"
    - After confirmation, create ticket with HIGH priority
