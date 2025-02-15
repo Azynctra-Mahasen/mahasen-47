@@ -1,5 +1,6 @@
 
 import { IntentProcessor } from './intent-processor.ts';
+import { searchKnowledgeBase, formatSearchResults, SearchResult } from './knowledge-base.ts';
 
 export class ResponseProcessor {
   static async processAIResponse(rawResponse: string, userMessage?: string): Promise<any> {
@@ -19,12 +20,18 @@ export class ResponseProcessor {
       }
 
       // Process order info if present
-      if (parsedResponse.intent === 'ORDER_PLACEMENT') {
+      if (parsedResponse.intent === 'ORDER_PLACEMENT' && userMessage) {
+        const searchResults = await searchKnowledgeBase(userMessage);
         parsedResponse.detected_entities.order_info = 
-          IntentProcessor.processOrderInfo(
+          await this.processOrderInfo(
             parsedResponse.detected_entities.order_info,
-            userMessage
+            searchResults
           );
+        
+        // Add formatted product information to the response
+        if (searchResults.length > 0) {
+          parsedResponse.response += '\n\n' + formatSearchResults(searchResults);
+        }
       }
 
       return parsedResponse;
@@ -32,6 +39,22 @@ export class ResponseProcessor {
       console.error('Error processing AI response:', error);
       return this.getDefaultResponse();
     }
+  }
+
+  private static async processOrderInfo(orderInfo: any, searchResults: SearchResult[]): Promise<any> {
+    if (!orderInfo) return null;
+    
+    const productResults = searchResults.filter(r => r.source === 'product');
+    
+    return {
+      ...orderInfo,
+      state: orderInfo.state || 'COLLECTING_INFO',
+      available_products: productResults.map(p => ({
+        title: p.metadata?.title,
+        price: p.metadata?.price,
+        discount: p.metadata?.discounts
+      }))
+    };
   }
 
   private static getDefaultResponse() {

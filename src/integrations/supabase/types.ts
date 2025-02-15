@@ -784,6 +784,24 @@ export type Database = {
           similarity: number
         }[]
       }
+      match_knowledge_base_and_products: {
+        Args: {
+          query_text: string
+          query_embedding: string
+          match_count?: number
+          full_text_weight?: number
+          semantic_weight?: number
+          match_threshold?: number
+          rrf_k?: number
+        }
+        Returns: {
+          id: string
+          content: string
+          similarity: number
+          source: string
+          metadata: Json
+        }[]
+      }
     }
     Enums: {
       agent_type: "welcome" | "sales" | "knowledge" | "support"
