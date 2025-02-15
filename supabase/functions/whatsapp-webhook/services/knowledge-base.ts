@@ -1,42 +1,49 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function searchKnowledgeBase(query_embedding: string, threshold = 0.5, count = 5): Promise<string> {
+export async function searchKnowledgeBase(embedding: number[]) {
   try {
-    console.log('Searching knowledge base with embedding...');
-    
-    const { data: matches, error } = await supabase.rpc('match_knowledge_base', {
-      query_text: '', // Empty string for query_text since we're using embedding
-      query_embedding,
-      match_count: count,
-      full_text_weight: 0.1,
-      semantic_weight: 0.9,
-      match_threshold: threshold,
-      rrf_k: 60
-    });
+    // First search in knowledge base files
+    const { data: filesData, error: filesError } = await supabase.rpc(
+      'match_knowledge_base',
+      {
+        query_embedding: embedding,
+        match_threshold: 0.7,
+        match_count: 5
+      }
+    );
 
-    if (error) {
-      console.error('Error searching knowledge base:', error);
-      return '';
-    }
+    if (filesError) throw filesError;
 
-    if (!matches || matches.length === 0) {
-      console.log('No relevant matches found in knowledge base');
-      return '';
-    }
+    // Search in products
+    const { data: productsData, error: productsError } = await supabase
+      .from('products')
+      .select('*')
+      .not('embedding', 'is', null);
 
-    const contextContent = matches
-      .map(match => match.content)
-      .join('\n\n');
+    if (productsError) throw productsError;
 
-    console.log('Found relevant knowledge base content:', contextContent);
-    return contextContent;
+    // Format products data
+    const productsContext = productsData.map(product => 
+      `Product: ${product.title}\nDescription: ${product.description}\nPrice: $${product.price}${product.discounts ? `\nDiscount: $${product.discounts}` : ''}`
+    ).join('\n\n');
+
+    // Combine both contexts
+    const filesContext = filesData.map(file => file.content).join('\n\n');
+    const combinedContext = [
+      filesContext,
+      'Available Products:',
+      productsContext
+    ].filter(Boolean).join('\n\n');
+
+    console.log('Combined knowledge base context:', combinedContext);
+    return combinedContext;
   } catch (error) {
-    console.error('Error in knowledge base search:', error);
-    return '';
+    console.error('Error searching knowledge base:', error);
+    return null;
   }
 }
