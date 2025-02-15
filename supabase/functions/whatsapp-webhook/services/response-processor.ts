@@ -1,5 +1,5 @@
 
-import { IntentProcessor } from './intent-processor.ts';
+import { processIntent } from './intent-processor.ts';
 
 export class ResponseProcessor {
   static async processAIResponse(rawResponse: string, userMessage?: string): Promise<any> {
@@ -13,7 +13,7 @@ export class ResponseProcessor {
       const parsedResponse = JSON.parse(cleanedResponse);
       console.log('Parsed AI response:', parsedResponse);
 
-      if (!IntentProcessor.validateIntentStructure(parsedResponse)) {
+      if (!this.validateIntentStructure(parsedResponse)) {
         console.error('Invalid response structure:', parsedResponse);
         return this.getDefaultResponse();
       }
@@ -21,7 +21,7 @@ export class ResponseProcessor {
       // Process order info if present
       if (parsedResponse.intent === 'ORDER_PLACEMENT') {
         parsedResponse.detected_entities.order_info = 
-          IntentProcessor.processOrderInfo(
+          await this.processOrderInfo(
             parsedResponse.detected_entities.order_info,
             userMessage
           );
@@ -31,6 +31,33 @@ export class ResponseProcessor {
     } catch (error) {
       console.error('Error processing AI response:', error);
       return this.getDefaultResponse();
+    }
+  }
+
+  private static validateIntentStructure(response: any): boolean {
+    return (
+      response &&
+      typeof response.intent === 'string' &&
+      typeof response.confidence === 'number' &&
+      typeof response.requires_escalation === 'boolean' &&
+      response.detected_entities &&
+      typeof response.response === 'string'
+    );
+  }
+
+  private static async processOrderInfo(orderInfo: any, userMessage?: string): Promise<any> {
+    if (!orderInfo) return null;
+    
+    try {
+      const intent = await processIntent(userMessage || '', '');
+      return {
+        ...orderInfo,
+        product_mentions: intent.detected_entities.product_mentions,
+        state: orderInfo.state || 'COLLECTING_INFO'
+      };
+    } catch (error) {
+      console.error('Error processing order info:', error);
+      return orderInfo;
     }
   }
 
