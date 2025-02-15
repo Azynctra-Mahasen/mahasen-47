@@ -1,4 +1,3 @@
-
 export type IntentType = 'SUPPORT_REQUEST' | 'HUMAN_AGENT_REQUEST' | 'ORDER_PLACEMENT' | 'GENERAL_QUERY';
 export type UrgencyLevel = 'low' | 'medium' | 'high';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH';

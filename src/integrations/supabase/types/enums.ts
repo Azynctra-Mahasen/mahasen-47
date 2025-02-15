@@ -1,4 +1,3 @@
-
 export interface DatabaseEnums {
   agent_type: "welcome" | "sales" | "knowledge" | "support"
   ai_model:

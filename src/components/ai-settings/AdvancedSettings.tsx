@@ -1,8 +1,6 @@
-
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -15,11 +13,9 @@ interface AdvancedSettingsProps {
   contextMemoryLength: string;
   conversationTimeout: number;
   modelName: AIModel;
-  useMCP: boolean;
   onContextMemoryChange: (value: string) => void;
   onTimeoutChange: (value: number) => void;
   onModelChange: (value: AIModel) => void;
-  onMCPChange: (value: boolean) => void;
   isModelChangeDisabled: boolean;
 }
 
@@ -27,11 +23,9 @@ export const AdvancedSettings = ({
   contextMemoryLength,
   conversationTimeout,
   modelName,
-  useMCP,
   onContextMemoryChange,
   onTimeoutChange,
   onModelChange,
-  onMCPChange,
   isModelChangeDisabled,
 }: AdvancedSettingsProps) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -107,20 +101,6 @@ export const AdvancedSettings = ({
                 Model change is temporarily disabled. Please wait 2 minutes.
               </p>
             )}
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div className="space-y-0.5">
-              <Label htmlFor="mcp-toggle">Use Model Context Protocol</Label>
-              <p className="text-sm text-slate-500">
-                Enable advanced context handling with MCP
-              </p>
-            </div>
-            <Switch
-              id="mcp-toggle"
-              checked={useMCP}
-              onCheckedChange={onMCPChange}
-            />
           </div>
 
           <div className="space-y-2">

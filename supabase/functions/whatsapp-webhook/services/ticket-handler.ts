@@ -16,27 +16,11 @@ export class TicketHandler {
     analysis: any,
     context: TicketContext
   ): Promise<string | null> {
-    console.log('Handling ticket creation:', {
-      intent: analysis.intent,
-      orderInfo: analysis.detected_entities.order_info,
-      context
-    });
-
     // Handle order tickets
     if (analysis.intent === 'ORDER_PLACEMENT' &&
-        analysis.detected_entities.order_info) {
-      
-      const orderInfo = analysis.detected_entities.order_info;
-      console.log('Processing order info for ticket:', orderInfo);
-
-      if (orderInfo.state === 'PROCESSING' && orderInfo.confirmed) {
-        return await this.createOrderTicket(analysis, context);
-      } else {
-        console.log('Order not ready for ticket creation:', {
-          state: orderInfo.state,
-          confirmed: orderInfo.confirmed
-        });
-      }
+        analysis.detected_entities.order_info?.state === 'PROCESSING' &&
+        analysis.detected_entities.order_info?.confirmed) {
+      return await this.createOrderTicket(analysis, context);
     }
 
     // Handle support tickets
@@ -49,7 +33,7 @@ export class TicketHandler {
 
   private static async createOrderTicket(analysis: any, context: TicketContext): Promise<string> {
     const orderInfo = analysis.detected_entities.order_info;
-    console.log('Creating order ticket...', orderInfo);
+    console.log('Creating order ticket...');
     
     try {
       const ticket = await AutomatedTicketService.generateTicket({
@@ -65,7 +49,6 @@ export class TicketHandler {
       if (ticket) {
         return `Your Order for ${orderInfo.product} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticket.id}.`;
       } else {
-        console.error('Failed to create ticket:', { orderInfo, context });
         return "Order failed. Please retry with correct Product & Quantity in a bit.";
       }
     } catch (error) {
