@@ -1,5 +1,5 @@
 
-import { processIntent } from './intent-processor.ts';
+import { IntentProcessor } from './intent-processor.ts';
 
 export class ResponseProcessor {
   static async processAIResponse(rawResponse: string, userMessage?: string): Promise<any> {
@@ -49,7 +49,7 @@ export class ResponseProcessor {
     if (!orderInfo) return null;
     
     try {
-      const intent = await processIntent(userMessage || '', '');
+      const intent = await IntentProcessor.processIntent(userMessage || '', '');
       return {
         ...orderInfo,
         product_mentions: intent.detected_entities.product_mentions,
