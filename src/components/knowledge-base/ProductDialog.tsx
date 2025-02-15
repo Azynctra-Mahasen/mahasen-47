@@ -35,8 +35,8 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
     defaultValues: {
       title: "",
       description: "",
-      price: "",
-      discounts: "",
+      price: "", // This is correct as a string since our schema handles the conversion
+      discounts: "", // This is correct as a string since our schema handles the conversion
     },
   });
 
@@ -68,8 +68,8 @@ export function ProductDialog({ open, onOpenChange, onSuccess }: ProductDialogPr
         .insert({
           title: values.title,
           description: values.description,
-          price: values.price,
-          discounts: values.discounts || null,
+          price: values.price, // This is now a number thanks to the schema transformation
+          discounts: values.discounts, // This is now a number or null thanks to the schema transformation
           embedding,
           embedding_status: 'completed'
         })
