@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -7,7 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export interface AISettings {
   tone: string;
   behaviour: string | null;
-  model_name: 'llama3.2:latest' | 'gemini-2.0-flash-exp';
+  model_name: 'llama-3.3-70b-versatile' | 'gemini-2.0-flash-exp';
   context_memory_length: number;
   conversation_timeout_hours: number;
 }
@@ -31,7 +32,7 @@ export async function getAISettings(): Promise<AISettings> {
     return {
       tone: 'Professional',
       behaviour: null,
-      model_name: 'llama3.2:latest',
+      model_name: 'llama-3.3-70b-versatile',
       context_memory_length: 2,
       conversation_timeout_hours: 1
     };

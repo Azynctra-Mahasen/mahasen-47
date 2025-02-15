@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { storeConversation } from "./database.ts";
 import { generateAIResponse } from "./ollama.ts";
 import { MessageBatcherService } from "./services/message-batcher.ts";
+import { getAISettings } from "./ai-settings.ts";
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -32,7 +33,17 @@ async function processMessageBatch(
       .single();
 
     if (conversation?.ai_enabled) {
-      const aiResponse = await generateAIResponse(batchedMessage, conversationId);
+      // Fetch AI settings before generating response
+      const aiSettings = await getAISettings();
+      console.log('Using AI settings:', aiSettings);
+
+      const aiResponse = await generateAIResponse(batchedMessage, {
+        messageId: whatsappMessageId,
+        conversationId: conversationId,
+        userName: userName,
+        knowledgeBase: ''
+      }, aiSettings);
+
       await sendFacebookMessage(userId, aiResponse, settings.access_token);
       
       // Store AI response in database
