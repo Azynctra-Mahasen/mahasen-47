@@ -402,6 +402,30 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          profile_url: string | null
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          profile_url?: string | null
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_url?: string | null
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       prompt_templates: {
         Row: {
           created_at: string | null

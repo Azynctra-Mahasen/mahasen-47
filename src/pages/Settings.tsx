@@ -17,17 +17,44 @@ const Settings = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const getUser = async () => {
+    const getProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/login");
         return;
       }
-      // For now, we'll use the email username as the default username
-      setUsername(session.user.email?.split('@')[0] || "");
+
+      // Get the user's profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, profile_url')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile) {
+        setUsername(profile.username || session.user.email?.split('@')[0] || "");
+        setProfileUrl(profile.profile_url || "");
+      } else {
+        // If no profile exists, create one with default values
+        const { error } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: session.user.id,
+              username: session.user.email?.split('@')[0] || "",
+              profile_url: ""
+            }
+          ]);
+        
+        if (error) {
+          console.error('Error creating profile:', error);
+        }
+        
+        setUsername(session.user.email?.split('@')[0] || "");
+      }
     };
 
-    getUser();
+    getProfile();
   }, [navigate]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,6 +81,20 @@ const Settings = () => {
         .getPublicUrl(fileName);
 
       setProfileUrl(publicUrl);
+
+      // Update the profile with the new picture URL
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ profile_url: publicUrl })
+          .eq('id', session.user.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+      }
+
       toast({
         title: "Success",
         description: "Profile picture updated successfully",
@@ -73,8 +114,24 @@ const Settings = () => {
   const handleSave = async () => {
     try {
       setIsLoading(true);
-      // Here we'll save the username and profile picture URL to the database
-      // This will be implemented when we create the profiles table
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error("No active session");
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          username,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.user.id);
+
+      if (error) {
+        throw error;
+      }
+
       toast({
         title: "Success",
         description: "Settings saved successfully",
