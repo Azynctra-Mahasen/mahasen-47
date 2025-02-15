@@ -1,6 +1,6 @@
 
 import { AutomatedTicketService } from '../automatedTicketService.ts';
-import { IntentProcessor } from './intent-processor.ts';
+import { processIntent } from './intent-processor.ts';
 
 interface TicketContext {
   messageId: string;
@@ -24,11 +24,20 @@ export class TicketHandler {
     }
 
     // Handle support tickets
-    if (IntentProcessor.evaluateEscalationNeeds(analysis)) {
+    if (this.evaluateEscalationNeeds(analysis)) {
       await this.createSupportTicket(analysis, context);
     }
 
     return null;
+  }
+
+  private static evaluateEscalationNeeds(analysis: any): boolean {
+    return (
+      analysis.requires_escalation ||
+      analysis.intent === 'HUMAN_AGENT_REQUEST' ||
+      (analysis.intent === 'SUPPORT_REQUEST' && 
+       analysis.detected_entities?.urgency_level === 'high')
+    );
   }
 
   private static async createOrderTicket(analysis: any, context: TicketContext): Promise<string> {
