@@ -18,24 +18,19 @@ export class TicketHandler {
   ): Promise<string | null> {
     console.log('Handling ticket creation with analysis:', analysis);
 
-    try {
-      // Handle order tickets
-      if (analysis.intent === 'ORDER_PLACEMENT' &&
-          analysis.detected_entities.order_info?.state === 'PROCESSING' &&
-          analysis.detected_entities.order_info?.confirmed) {
-        return await this.createOrderTicket(analysis, context);
-      }
-
-      // Handle support tickets
-      if (IntentProcessor.evaluateEscalationNeeds(analysis)) {
-        await this.createSupportTicket(analysis, context);
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error in handleTicketCreation:', error);
-      throw error; // Propagate error to be handled by caller
+    // Handle order tickets
+    if (analysis.intent === 'ORDER_PLACEMENT' &&
+        analysis.detected_entities.order_info?.state === 'PROCESSING' &&
+        analysis.detected_entities.order_info?.confirmed) {
+      return await this.createOrderTicket(analysis, context);
     }
+
+    // Handle support tickets
+    if (IntentProcessor.evaluateEscalationNeeds(analysis)) {
+      await this.createSupportTicket(analysis, context);
+    }
+
+    return null;
   }
 
   private static async createOrderTicket(analysis: any, context: TicketContext): Promise<string> {
@@ -56,11 +51,11 @@ export class TicketHandler {
       if (ticket) {
         return `Your Order for ${orderInfo.product} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticket.id}.`;
       } else {
-        throw new Error('Failed to create ticket');
+        return "Order failed. Please retry with correct Product & Quantity in a bit.";
       }
     } catch (error) {
       console.error('Error creating order ticket:', error);
-      throw error; // Propagate error to be handled by caller
+      return "Order failed. Please retry with correct Product & Quantity in a bit.";
     }
   }
 
