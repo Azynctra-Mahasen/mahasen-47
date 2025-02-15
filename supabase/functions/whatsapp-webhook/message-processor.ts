@@ -9,6 +9,20 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+async function getMessengerSettings() {
+  const { data, error } = await supabase
+    .from('messenger_settings')
+    .select('access_token, page_id')
+    .single();
+
+  if (error) {
+    console.error('Error fetching messenger settings:', error);
+    return null;
+  }
+
+  return data;
+}
+
 async function processMessageBatch(
   whatsappMessageId: string,
   batchedMessage: string,
@@ -38,14 +52,19 @@ async function processMessageBatch(
       console.log('Using AI settings:', aiSettings);
 
       // Get messenger settings
-      const { data: messengerSettings, error: settingsError } = await supabase
-        .from('messenger_settings')
-        .select('access_token')
-        .single();
-
-      if (settingsError || !messengerSettings) {
-        console.error('Error fetching messenger settings:', settingsError);
-        throw new Error('Failed to fetch messenger settings');
+      const messengerSettings = await getMessengerSettings();
+      
+      if (!messengerSettings) {
+        console.error('No messenger settings found');
+        // Store error message in database
+        await supabase.from('messages').insert({
+          conversation_id: conversationId,
+          content: "Sorry, there was an error processing your message. Please try again later.",
+          sender_name: 'System',
+          sender_number: 'system',
+          status: 'sent',
+        });
+        return;
       }
 
       const aiResponse = await generateAIResponse(batchedMessage, {
