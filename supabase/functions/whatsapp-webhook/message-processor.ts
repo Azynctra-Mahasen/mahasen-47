@@ -18,15 +18,10 @@ export async function processWhatsAppMessage(
   userId: string,
   userName: string
 ): Promise<void> {
-  console.log('Starting message processing:', {
-    whatsappMessageId,
-    userMessage,
-    userId,
-    userName
-  });
+  console.log('Processing message:', { whatsappMessageId, userMessage, userId, userName });
 
   try {
-    // Handle pending order confirmation first
+    // Check for pending order confirmation first
     const orderHandled = await OrderProcessor.handlePendingOrderConfirmation({
       messageId: whatsappMessageId,
       userId,
@@ -36,13 +31,12 @@ export async function processWhatsAppMessage(
     });
 
     if (orderHandled) {
+      console.log('Order confirmation handled successfully');
       return;
     }
 
-    // Get or create conversation
+    // Continue with normal message processing
     const conversationId = await ConversationService.getOrCreateConversation(userId, userName);
-
-    // Store the user's message
     const messageData = await ConversationService.storeMessage(
       conversationId,
       userMessage,
@@ -51,35 +45,35 @@ export async function processWhatsAppMessage(
       whatsappMessageId
     );
 
-    // Get AI settings and generate response
     const aiSettings = await getAISettings();
     const conversationHistory = await ConversationService.getRecentConversationHistory(
       userId,
       aiSettings.context_memory_length
     );
 
-    const context = {
+    const aiResponse = await generateAIResponse(userMessage, {
       userName,
       messageId: messageData.id,
       conversationId,
       knowledgeBase: conversationHistory,
       userMessage,
       platform: 'whatsapp' as const
-    };
+    }, aiSettings);
 
-    const aiResponse = await generateAIResponse(userMessage, context, aiSettings);
     const responseText = extractResponseText(aiResponse);
 
-    // If this is an order placement showing summary, store the context
+    // Store pending order if this is an order summary
     if (isOrderSummary(aiResponse)) {
-      console.log('Storing pending order:', aiResponse.detected_entities.order_info);
+      console.log('Detected order summary, storing pending order:', 
+        aiResponse.detected_entities.order_info
+      );
       await OrderProcessor.storePendingOrder(
         userId,
         aiResponse.detected_entities.order_info
       );
     }
 
-    // Send WhatsApp response
+    // Send response
     await sendWhatsAppMessage(
       userId,
       responseText,
@@ -87,27 +81,21 @@ export async function processWhatsAppMessage(
       Deno.env.get('WHATSAPP_PHONE_ID')!
     );
 
-    // Store the conversation
+    // Store conversation
     await storeConversation(supabase, userId, userName, userMessage, responseText);
 
   } catch (error) {
-    console.error('Error in message processing:', error);
-    
-    try {
-      await supabase.from('webhook_errors').insert({
-        error_type: 'WHATSAPP_WEBHOOK_ERROR',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: {
-          whatsappMessageId,
-          userId,
-          userName,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (logError) {
-      console.error('Error logging to webhook_errors:', logError);
-    }
-    
+    console.error('Error processing message:', error);
+    await supabase.from('webhook_errors').insert({
+      error_type: 'WHATSAPP_WEBHOOK_ERROR',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      details: {
+        whatsappMessageId,
+        userId,
+        userName,
+        timestamp: new Date().toISOString()
+      }
+    });
     throw error;
   }
 }
