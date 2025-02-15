@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +12,6 @@ import {
   CardDescription,
   CardContent
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Camera, User, Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -36,15 +34,17 @@ const Settings = () => {
         }
 
         // Get the user's profile
-        const { data: profile } = await supabase
+        const { data: profile, error } = await supabase
           .from('profiles')
-          .select('username, email, profile_url, whatsapp_number')
+          .select('username, profile_url, whatsapp_number')
           .eq('id', session.user.id)
           .single();
 
+        if (error) throw error;
+
         if (profile) {
           setUsername(profile.username || "");
-          setEmail(profile.email || session.user.email || "");
+          setEmail(session.user.email || "");
           setWhatsappNumber(profile.whatsapp_number || "");
           setProfileUrl(profile.profile_url || "");
         }
@@ -68,37 +68,57 @@ const Settings = () => {
     try {
       setLoading(true);
       
-      // Upload the file to Supabase Storage
+      // Check file size (2MB limit)
+      if (file.size > 2 * 1024 * 1024) {
+        throw new Error("File size must be less than 2MB");
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
+      // Create a unique file name using user ID and timestamp
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
+      const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
+
+      // Delete old profile picture if it exists
+      if (profileUrl) {
+        const oldFileName = profileUrl.split('/').pop();
+        if (oldFileName) {
+          await supabase.storage
+            .from('profile-pictures')
+            .remove([oldFileName]);
+        }
+      }
+
+      // Upload the new file
       const { error: uploadError } = await supabase.storage
         .from('profile-pictures')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       // Get the public URL
       const { data: { publicUrl } } = supabase.storage
         .from('profile-pictures')
         .getPublicUrl(fileName);
 
-      setProfileUrl(publicUrl);
-
       // Update the profile with the new picture URL
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ profile_url: publicUrl })
-          .eq('id', session.user.id);
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ 
+          profile_url: publicUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.user.id);
 
-        if (updateError) {
-          throw updateError;
-        }
-      }
+      if (updateError) throw updateError;
 
+      setProfileUrl(publicUrl);
       toast({
         title: "Success",
         description: "Profile picture updated successfully",
@@ -108,7 +128,7 @@ const Settings = () => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to upload profile picture",
+        description: error instanceof Error ? error.message : "Failed to upload profile picture",
       });
     } finally {
       setLoading(false);
@@ -117,8 +137,8 @@ const Settings = () => {
 
   const handleUpdatePassword = async () => {
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: 'new-password'
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
 
       if (error) throw error;
@@ -150,7 +170,6 @@ const Settings = () => {
         .from('profiles')
         .update({
           username,
-          email,
           whatsapp_number: whatsappNumber,
           updated_at: new Date().toISOString()
         })
@@ -254,6 +273,7 @@ const Settings = () => {
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
                     placeholder="Enter email"
+                    disabled
                   />
                 </div>
               </div>
