@@ -1,34 +1,35 @@
+
 import { DatabaseEnums } from './common';
 
 export type ConversationTables = {
   conversations: {
     Row: {
-      ai_enabled: boolean | null
-      contact_name: string
-      contact_number: string
-      created_at: string | null
-      id: string
-      platform: DatabaseEnums["platform"]
-      updated_at: string | null
-    }
+      ai_enabled: boolean | null;
+      contact_name: string;
+      contact_number: string;
+      created_at: string | null;
+      id: string;
+      platform: DatabaseEnums["platform"];
+      updated_at: string | null;
+    };
     Insert: {
-      ai_enabled?: boolean | null
-      contact_name: string
-      contact_number: string
-      created_at?: string | null
-      id?: string
-      platform: DatabaseEnums["platform"]
-      updated_at?: string | null
-    }
+      ai_enabled?: boolean | null;
+      contact_name: string;
+      contact_number: string;
+      created_at?: string | null;
+      id?: string;
+      platform: DatabaseEnums["platform"];
+      updated_at?: string | null;
+    };
     Update: {
-      ai_enabled?: boolean | null
-      contact_name?: string
-      contact_number?: string
-      created_at?: string | null
-      id?: string
-      platform?: DatabaseEnums["platform"]
-      updated_at?: string | null
-    }
-    Relationships: []
-  }
-}
+      ai_enabled?: boolean | null;
+      contact_name?: string;
+      contact_number?: string;
+      created_at?: string | null;
+      id?: string;
+      platform?: DatabaseEnums["platform"];
+      updated_at?: string | null;
+    };
+    Relationships: [];
+  };
+};
