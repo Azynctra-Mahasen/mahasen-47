@@ -1,4 +1,3 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -92,4 +91,41 @@ export function formatSearchResults(results: SearchResult[]): string {
   }
 
   return formattedContent.trim();
+}
+
+export function formatKnowledgeBaseContext(searchResults: SearchResult[]): string {
+  const productResults = searchResults.filter(r => r.source === 'product');
+  const knowledgeResults = searchResults.filter(r => r.source === 'knowledge_base');
+  
+  let context = '';
+
+  // Format product information first
+  if (productResults.length > 0) {
+    context += '=== Available Products ===\n';
+    productResults.forEach(product => {
+      const price = product.metadata?.price || 0;
+      const discount = product.metadata?.discounts || 0;
+      const finalPrice = price - (price * (discount / 100));
+      
+      context += `Product: ${product.metadata?.title}\n`;
+      context += `Regular Price: $${price.toFixed(2)}\n`;
+      if (discount > 0) {
+        context += `Discount: ${discount}%\n`;
+        context += `Final Price: $${finalPrice.toFixed(2)}\n`;
+      }
+      context += `Description: ${product.content}\n\n`;
+    });
+  }
+
+  // Add knowledge base content
+  if (knowledgeResults.length > 0) {
+    if (productResults.length > 0) {
+      context += '=== General Information ===\n';
+    }
+    context += knowledgeResults
+      .map(result => result.content)
+      .join('\n\n');
+  }
+
+  return context.trim();
 }
