@@ -16,6 +16,12 @@ import {
 import { Camera, User, Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
+interface Profile {
+  username: string | null;
+  profile_url: string | null;
+  whatsapp_number: string | null;
+}
+
 const Settings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -35,20 +41,22 @@ const Settings = () => {
         }
 
         // Get the user's profile
-        const { data: profile, error } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select('username, profile_url, whatsapp_number')
           .eq('id', session.user.id)
           .single();
 
-        if (error) throw error;
-
-        if (profile) {
-          setUsername(profile.username || "");
-          setEmail(session.user.email || "");
-          setWhatsappNumber(profile.whatsapp_number || "");
-          setProfileUrl(profile.profile_url || "");
+        if (error) {
+          console.error('Error fetching profile:', error);
+          throw error;
         }
+
+        const profile = data as Profile;
+        setUsername(profile.username || "");
+        setEmail(session.user.email || "");
+        setWhatsappNumber(profile.whatsapp_number || "");
+        setProfileUrl(profile.profile_url || "");
       } catch (error) {
         console.error('Error fetching profile:', error);
         toast({
