@@ -26,60 +26,93 @@ export async function processWhatsAppMessage(
 
   try {
     // Check for pending order confirmation first
-    const { data: pendingOrder } = await supabase
+    const { data: pendingOrder, error: pendingOrderError } = await supabase
       .from('conversation_contexts')
       .select('*')
       .eq('conversation_id', userId)
       .eq('context_type', 'pending_order')
       .single();
 
-    // If there's a pending order and user confirms
+    if (pendingOrderError && pendingOrderError.code !== 'PGRST116') {
+      console.error('Error fetching pending order:', pendingOrderError);
+      throw pendingOrderError;
+    }
+
+    // Handle order confirmation if there's a pending order
     if (pendingOrder && isConfirmationMessage(userMessage)) {
       console.log('Processing order confirmation for pending order:', pendingOrder);
       
-      const orderInfo = JSON.parse(pendingOrder.context);
-      const ticketResponse = await TicketHandler.handleTicketCreation(
-        {
-          intent: 'ORDER_PLACEMENT',
-          confidence: 1,
-          requires_escalation: false,
-          escalation_reason: null,
-          detected_entities: {
-            product_mentions: [orderInfo.product],
-            issue_type: null,
-            urgency_level: 'medium',
-            order_info: {
-              product: orderInfo.product,
-              quantity: orderInfo.quantity,
-              state: 'PROCESSING',
-              confirmed: true
+      try {
+        const orderInfo = JSON.parse(pendingOrder.context);
+        
+        // Create the ticket with order information
+        const ticketResponse = await TicketHandler.handleTicketCreation(
+          {
+            intent: 'ORDER_PLACEMENT',
+            confidence: 1,
+            requires_escalation: false,
+            escalation_reason: null,
+            detected_entities: {
+              product_mentions: [orderInfo.product],
+              issue_type: null,
+              urgency_level: 'medium',
+              order_info: {
+                product: orderInfo.product,
+                quantity: orderInfo.quantity,
+                state: 'PROCESSING',
+                confirmed: true
+              }
             }
+          },
+          {
+            messageId: whatsappMessageId,
+            conversationId: userId,
+            userName,
+            platform: 'whatsapp',
+            messageContent: userMessage
           }
-        },
-        {
-          messageId: whatsappMessageId,
-          conversationId: userId,
-          userName,
-          platform: 'whatsapp',
-          messageContent: userMessage
+        );
+
+        // Always clear the pending order context
+        await supabase
+          .from('conversation_contexts')
+          .delete()
+          .eq('id', pendingOrder.id);
+
+        // Send response and return
+        if (ticketResponse) {
+          await sendWhatsAppMessage(
+            userId,
+            ticketResponse,
+            Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+            Deno.env.get('WHATSAPP_PHONE_ID')!
+          );
+        } else {
+          await sendWhatsAppMessage(
+            userId,
+            "Order failed. Please retry with correct Product & Quantity in a bit.",
+            Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+            Deno.env.get('WHATSAPP_PHONE_ID')!
+          );
         }
-      );
+        return; // Important: Return here to prevent further processing
+      } catch (error) {
+        console.error('Error processing order confirmation:', error);
+        
+        // Clear the pending order context even if there's an error
+        await supabase
+          .from('conversation_contexts')
+          .delete()
+          .eq('id', pendingOrder.id);
 
-      // Clear the pending order context
-      await supabase
-        .from('conversation_contexts')
-        .delete()
-        .eq('id', pendingOrder.id);
-
-      // Send the ticket response
-      if (ticketResponse) {
+        // Send error message and return
         await sendWhatsAppMessage(
           userId,
-          ticketResponse,
+          "Sorry, there was an error processing your order. Please try again.",
           Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
           Deno.env.get('WHATSAPP_PHONE_ID')!
         );
-        return;
+        return; // Important: Return here to prevent further processing
       }
     }
 
