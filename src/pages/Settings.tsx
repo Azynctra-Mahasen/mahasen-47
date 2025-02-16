@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,12 +14,9 @@ import {
 } from "@/components/ui/card";
 import { Camera, User, Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { Database } from "@/integrations/supabase/types";
 
-interface Profile {
-  username: string | null;
-  profile_url: string | null;
-  whatsapp_number: string | null;
-}
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -53,10 +49,10 @@ const Settings = () => {
         }
 
         if (data) {
-          setUsername(data.username || "");
-          setEmail(session.user.email || "");
-          setWhatsappNumber(data.whatsapp_number || "");
-          setProfileUrl(data.profile_url || "");
+          setUsername(data.username ?? "");
+          setEmail(session.user.email ?? "");
+          setWhatsappNumber(data.whatsapp_number ?? "");
+          setProfileUrl(data.profile_url ?? "");
         }
       } catch (error) {
         console.error('Error fetching profile:', error);
