@@ -9,8 +9,6 @@ import { ClearChatDialog } from "@/components/chat/ClearChatDialog";
 import { useConversation } from "@/components/chat/useConversation";
 import { useMessageSending } from "@/components/chat/useMessageSending";
 import { useRealtimeMessages } from "@/components/chat/useRealtimeMessages";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const ChatConversation = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +19,14 @@ const ChatConversation = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  const { conversation, messages, refetchMessages, updateAIEnabled } = useConversation(id);
+  const { 
+    conversation, 
+    messages, 
+    refetchMessages, 
+    updateAIEnabled,
+    clearMessages 
+  } = useConversation(id);
+
   const { sendMessage, isSending } = useMessageSending(
     id,
     conversation?.contact_number,
@@ -74,37 +79,16 @@ const ChatConversation = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleClearChat = async () => {
-    if (!id) {
-      toast.error("Invalid conversation ID");
-      return;
-    }
-    
-    try {
-      console.log('Attempting to delete messages for conversation:', id);
-      
-      // Delete all messages for this conversation in one operation
-      const { error: deleteError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('conversation_id', id);
-
-      if (deleteError) {
-        console.error('Database deletion error:', deleteError);
-        throw deleteError;
+  const handleClearChat = () => {
+    setIsCleared(true);
+    clearMessages.mutate(undefined, {
+      onSuccess: () => {
+        console.log('Messages cleared successfully');
+      },
+      onError: () => {
+        setIsCleared(false);
       }
-
-      // Only update UI state after successful deletion
-      console.log('Messages deleted successfully');
-      setIsCleared(true);
-      await refetchMessages(); // Refresh the messages list
-      toast.success("Chat history cleared successfully");
-    } catch (error) {
-      console.error('Error clearing chat:', error);
-      toast.error("Failed to clear chat history");
-      // Reset cleared state in case of error
-      setIsCleared(false);
-    }
+    });
   };
 
   if (!id) {
