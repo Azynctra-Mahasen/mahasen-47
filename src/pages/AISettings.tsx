@@ -1,26 +1,19 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { AdvancedSettings } from "@/components/ai-settings/AdvancedSettings";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { AITone } from "@/types/ai";
 import type { Database } from "@/integrations/supabase/types/common";
+import { AISettingsHeader } from "@/components/ai-settings/AISettingsHeader";
+import { AIToneSelect } from "@/components/ai-settings/AIToneSelect";
+import { AIBehaviourInput } from "@/components/ai-settings/AIBehaviourInput";
+import { AdvancedSettings } from "@/components/ai-settings/AdvancedSettings";
+import { AISettingsActions } from "@/components/ai-settings/AISettingsActions";
 
 type AIModel = Database['public']['Enums']['ai_model'];
 
 const AISettings = () => {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const [tone, setTone] = useState<AITone>("Professional");
   const [behaviour, setBehaviour] = useState("");
@@ -67,17 +60,7 @@ const AISettings = () => {
     };
 
     loadSettings();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        navigate("/login");
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [toast, navigate]);
+  }, [toast]);
 
   const handleModelChange = (value: AIModel) => {
     setModelName(value);
@@ -90,7 +73,6 @@ const AISettings = () => {
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // Validate inputs before saving
       const memoryLength = contextMemoryLength === "Disable" ? 0 : parseInt(contextMemoryLength);
       if (isNaN(memoryLength) || memoryLength < 0 || memoryLength > 5) {
         throw new Error("Invalid context memory length");
@@ -118,8 +100,6 @@ const AISettings = () => {
         title: "Settings saved",
         description: "AI settings have been updated successfully.",
       });
-      
-      navigate("/dashboard");
     } catch (error) {
       console.error('Error saving AI settings:', error);
       toast({
@@ -135,79 +115,23 @@ const AISettings = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(-1)}
-              className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
-            </Button>
-            <h1 className="text-3xl font-bold">AI Settings</h1>
-          </div>
-        </div>
-
+        <AISettingsHeader />
+        
         <div className="space-y-8 bg-white dark:bg-slate-900 p-6 rounded-lg shadow">
-          <div className="space-y-4">
-            <label className="text-lg font-medium">AI Tone</label>
-            <Select 
-              value={tone} 
-              onValueChange={(value: string) => setTone(value as AITone)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select tone" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Professional">Professional</SelectItem>
-                <SelectItem value="Friendly">Friendly</SelectItem>
-                <SelectItem value="Empathetic">Empathetic</SelectItem>
-                <SelectItem value="Playful">Playful</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-4">
-            <label className="text-lg font-medium">AI Behaviour</label>
-            <Textarea
-              value={behaviour}
-              onChange={(e) => setBehaviour(e.target.value)}
-              placeholder="Define how the AI should behave when answering customer inquiries..."
-              className="min-h-[150px]"
-              maxLength={1000}
-            />
-            <p className="text-sm text-slate-500">
-              {behaviour.length}/1000 characters
-            </p>
-          </div>
-
+          <AIToneSelect tone={tone} onToneChange={setTone} />
+          <AIBehaviourInput behaviour={behaviour} onBehaviourChange={setBehaviour} />
+          
           <AdvancedSettings
             contextMemoryLength={contextMemoryLength}
             conversationTimeout={conversationTimeout}
             modelName={modelName}
             onContextMemoryChange={setContextMemoryLength}
             onTimeoutChange={setConversationTimeout}
-            onModelChange={setModelName}
+            onModelChange={handleModelChange}
             isModelChangeDisabled={isModelChangeDisabled}
           />
 
-          <div className="flex justify-end space-x-4 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => navigate("/dashboard")}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isLoading}
-            >
-              {isLoading ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
+          <AISettingsActions onSave={handleSave} isLoading={isLoading} />
         </div>
       </div>
     </div>
