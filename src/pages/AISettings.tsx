@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +13,7 @@ import { AISettingsActions } from "@/components/ai-settings/AISettingsActions";
 type AIModel = Database['public']['Enums']['ai_model'];
 
 const AISettings = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [tone, setTone] = useState<AITone>("Professional");
   const [behaviour, setBehaviour] = useState("");
@@ -60,7 +60,7 @@ const AISettings = () => {
     };
 
     loadSettings();
-  }, [toast]);
+  }, [toast, navigate]);
 
   const handleModelChange = (value: AIModel) => {
     setModelName(value);
