@@ -82,20 +82,38 @@ const ChatConversation = () => {
     
     try {
       console.log('Attempting to delete messages for conversation:', id);
-      const { error } = await supabase
+      
+      // First, get all message IDs for this conversation
+      const { data: messageIds, error: fetchError } = await supabase
         .from('messages')
-        .delete()
+        .select('id')
         .eq('conversation_id', id);
 
-      if (error) {
-        console.error('Database deletion error:', error);
-        throw error;
+      if (fetchError) {
+        console.error('Error fetching message IDs:', fetchError);
+        throw fetchError;
       }
 
-      console.log('Messages deleted successfully');
-      await refetchMessages();
-      setIsCleared(true);
-      toast.success("Chat history cleared successfully");
+      if (messageIds && messageIds.length > 0) {
+        // Delete all messages in one batch
+        const { error: deleteError } = await supabase
+          .from('messages')
+          .delete()
+          .eq('conversation_id', id);
+
+        if (deleteError) {
+          console.error('Database deletion error:', deleteError);
+          throw deleteError;
+        }
+
+        console.log('Messages deleted successfully');
+        setIsCleared(true);
+        await refetchMessages(); // Refresh the messages list
+        toast.success("Chat history cleared successfully");
+      } else {
+        console.log('No messages to delete');
+        toast.info("No messages to clear");
+      }
     } catch (error) {
       console.error('Error clearing chat:', error);
       toast.error("Failed to clear chat history");
