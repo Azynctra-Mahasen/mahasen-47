@@ -52,11 +52,12 @@ const Settings = () => {
           throw error;
         }
 
-        const profile = data as Profile;
-        setUsername(profile.username || "");
-        setEmail(session.user.email || "");
-        setWhatsappNumber(profile.whatsapp_number || "");
-        setProfileUrl(profile.profile_url || "");
+        if (data) {
+          setUsername(data.username || "");
+          setEmail(session.user.email || "");
+          setWhatsappNumber(data.whatsapp_number || "");
+          setProfileUrl(data.profile_url || "");
+        }
       } catch (error) {
         console.error('Error fetching profile:', error);
         toast({
