@@ -27,7 +27,6 @@ export const useMessageSending = (
           status: "sent",
           sender_name: "Agent",
           sender_number: "system",
-          // Add metadata to explicitly mark this as an agent message
           metadata: {
             is_agent_message: true,
             skip_intent_analysis: true
@@ -37,15 +36,6 @@ export const useMessageSending = (
         .single();
 
       if (dbError) throw dbError;
-
-      // Get conversation data
-      const { data: conversation, error: convError } = await supabase
-        .from("conversations")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (convError) throw convError;
 
       // Send WhatsApp message
       const messagePayload: WhatsAppMessage = {
