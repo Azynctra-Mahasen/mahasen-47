@@ -15,13 +15,7 @@ export const useRealtimeMessages = (
 
     console.log("Setting up real-time subscription for conversation:", id);
 
-    // Check for existing channel with this ID
-    const existingChannel = supabase.getChannels().find(ch => ch.topic === `messages:${id}`);
-    if (existingChannel) {
-      console.log('Found existing channel, removing it first');
-      supabase.removeChannel(existingChannel);
-    }
-
+    // Single channel subscription
     const channel = supabase
       .channel(`messages:${id}`)
       .on(
@@ -32,62 +26,15 @@ export const useRealtimeMessages = (
           table: 'messages',
           filter: `conversation_id=eq.${id}`
         },
-        async (payload) => {
+        (payload) => {
           console.log("Received real-time update:", payload);
-          
-          // Handle different event types
-          if (payload.eventType === 'INSERT') {
-            queryClient.setQueryData(
-              ['messages', id],
-              (oldData: any[] | undefined) => {
-                if (!oldData) {
-                  // If cache is empty, trigger a refetch instead of replacing
-                  refetchMessages();
-                  return [];
-                }
-                // Only add if message doesn't already exist
-                const messageExists = oldData.some(msg => msg.id === payload.new.id);
-                if (!messageExists) {
-                  if (payload.new.status === 'received') {
-                    toast.success('New message received');
-                  }
-                  // Ensure proper ordering by timestamp
-                  const newData = [...oldData, payload.new];
-                  return newData.sort((a, b) => 
-                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                  );
-                }
-                return oldData;
-              }
-            );
-          } else if (payload.eventType === 'UPDATE') {
-            queryClient.setQueryData(
-              ['messages', id],
-              (oldData: any[] | undefined) => {
-                if (!oldData) {
-                  refetchMessages();
-                  return [];
-                }
-                const updatedData = oldData.map(msg => 
-                  msg.id === payload.new.id ? payload.new : msg
-                );
-                return updatedData.sort((a, b) => 
-                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                );
-              }
-            );
-            if (payload.old.read === false && payload.new.read === true) {
-              console.log('Message marked as read:', payload.new.id);
-            }
-          }
+          // Always refetch messages to ensure consistency
+          refetchMessages();
         }
       )
       .subscribe((status) => {
         console.log("Realtime subscription status:", status);
-        
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to real-time updates');
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           console.error('Failed to connect to real-time updates');
           toast.error('Failed to connect to real-time updates');
         }
@@ -113,10 +60,9 @@ export const useRealtimeMessages = (
 
     markMessagesAsRead();
 
-    // Cleanup function
     return () => {
       console.log("Cleaning up subscription for conversation:", id);
       supabase.removeChannel(channel);
     };
-  }, [id, queryClient, refetchMessages]);
+  }, [id, refetchMessages]);
 };
