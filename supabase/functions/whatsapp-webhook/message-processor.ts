@@ -1,6 +1,6 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { storeConversation } from "./database.ts";
+import { storeConversation, storeAIResponse } from "./database.ts";
 import { generateAIResponse } from "./ollama.ts";
 import { MessageBatcherService } from "./services/message-batcher.ts";
 import { getAISettings } from "./ai-settings.ts";
@@ -19,6 +19,8 @@ async function processMessageBatch(
   userName: string
 ): Promise<void> {
   try {
+    console.log('Processing message batch:', { whatsappMessageId, batchedMessage, userId, userName });
+    
     const conversationId = await storeConversation(
       supabase,
       userId,
@@ -45,13 +47,7 @@ async function processMessageBatch(
       }, aiSettings);
 
       // Store AI response in database
-      await supabase.from('messages').insert({
-        conversation_id: conversationId,
-        content: aiResponse,
-        sender_name: 'AI Assistant',
-        sender_number: 'system',
-        status: 'sent',
-      });
+      await storeAIResponse(supabase, conversationId, aiResponse);
 
       // Send the WhatsApp message
       if (conversation.contact_number) {
