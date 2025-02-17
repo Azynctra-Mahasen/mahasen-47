@@ -15,6 +15,13 @@ export const useRealtimeMessages = (
 
     console.log("Setting up real-time subscription for conversation:", id);
 
+    // Check for existing channel with this ID
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === `messages:${id}`);
+    if (existingChannel) {
+      console.log('Found existing channel, removing it first');
+      supabase.removeChannel(existingChannel);
+    }
+
     const channel = supabase
       .channel(`messages:${id}`)
       .on(
@@ -70,11 +77,6 @@ export const useRealtimeMessages = (
           toast.success('Connected to real-time updates');
         } else if (status === 'CHANNEL_ERROR') {
           toast.error('Failed to connect to real-time updates');
-          // Attempt to reconnect after a delay
-          setTimeout(() => {
-            console.log("Attempting to reconnect...");
-            channel.subscribe();
-          }, 5000);
         }
       });
 
@@ -98,10 +100,10 @@ export const useRealtimeMessages = (
 
     markMessagesAsRead();
 
-    // Cleanup subscription on unmount
+    // Cleanup function
     return () => {
-      console.log("Cleaning up subscription");
-      channel.unsubscribe();
+      console.log("Cleaning up subscription for conversation:", id);
+      supabase.removeChannel(channel);
     };
   }, [id, queryClient]);
 };
