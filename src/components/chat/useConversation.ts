@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -20,22 +19,12 @@ export const useConversation = (id: string | undefined) => {
         .from("conversations")
         .select("*")
         .eq("id", id)
-        .maybeSingle();
+        .single();
 
-      if (error) {
-        console.error("Error fetching conversation:", error);
-        throw error;
-      }
-      
-      if (!data) {
-        throw new Error("Conversation not found");
-      }
-      
+      if (error) throw error;
       return data as Conversation;
     },
     enabled: !!id,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * (2 ** attemptIndex), 30000),
   });
 
   const { data: messages, refetch: refetchMessages } = useQuery({
@@ -49,16 +38,10 @@ export const useConversation = (id: string | undefined) => {
         .eq("conversation_id", id)
         .order("created_at", { ascending: true });
 
-      if (error) {
-        console.error("Error fetching messages:", error);
-        throw error;
-      }
-
+      if (error) throw error;
       return data as Message[];
     },
     enabled: !!id,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * (2 ** attemptIndex), 30000),
   });
 
   const updateAIEnabled = useMutation({
@@ -91,42 +74,10 @@ export const useConversation = (id: string | undefined) => {
     },
   });
 
-  const clearMessages = useMutation({
-    mutationFn: async () => {
-      if (!id) throw new Error("Conversation ID is required");
-
-      console.log('Clearing messages for conversation:', id);
-
-      const { error } = await supabase
-        .from("messages")
-        .delete()
-        .eq("conversation_id", id);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      // Invalidate and refetch messages
-      queryClient.invalidateQueries({ queryKey: ["messages", id] });
-      toast({
-        title: "Success",
-        description: "Chat history cleared successfully",
-      });
-    },
-    onError: (error) => {
-      console.error("Error clearing messages:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to clear chat history",
-      });
-    },
-  });
-
   return {
     conversation,
     messages,
     refetchMessages,
     updateAIEnabled,
-    clearMessages,
   };
 };

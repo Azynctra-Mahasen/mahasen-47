@@ -42,6 +42,7 @@ export class TicketService {
         platform: params.platform,
         type: params.type,
         body: params.body,
+        message_id: params.messageId,
         conversation_id: params.conversationId,
         intent_type: params.intentType || 'SUPPORT',
         context: params.context,
@@ -78,20 +79,6 @@ export class TicketService {
           description: "No ticket data returned after creation",
         });
         throw error;
-      }
-
-      // If we have a message ID, create the ticket-message relationship
-      if (params.messageId) {
-        const { error: relationError } = await supabase
-          .from('ticket_messages')
-          .insert({
-            ticket_id: ticket.id,
-            message_id: params.messageId
-          });
-
-        if (relationError) {
-          console.error('TicketService: Failed to create ticket-message relationship:', relationError);
-        }
       }
 
       console.log('TicketService: Successfully created ticket:', ticket);

@@ -42,6 +42,7 @@ const Tickets = () => {
           context: ticket.context || undefined,
           conversation_id: ticket.conversation_id || undefined,
           escalation_reason: ticket.escalation_reason || undefined,
+          message_id: ticket.message_id || undefined,
           last_updated_at: ticket.last_updated_at || undefined
         }));
 

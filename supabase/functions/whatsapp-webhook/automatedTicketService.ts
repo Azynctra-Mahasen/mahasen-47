@@ -1,4 +1,3 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const supabase = createClient(
@@ -32,7 +31,6 @@ interface AutomatedTicketParams {
   platform: 'whatsapp' | 'facebook' | 'instagram';
   messageContent: string;
   context: string;
-  whatsappMessageId?: string;
 }
 
 export class AutomatedTicketService {
@@ -51,7 +49,6 @@ export class AutomatedTicketService {
         body: params.messageContent,
         message_id: params.messageId,
         conversation_id: params.conversationId,
-        whatsapp_message_id: params.whatsappMessageId, // Store the original WhatsApp message ID
         intent_type: this.determineTicketType(params.analysis),
         context: params.context,
         confidence_score: params.analysis.confidence,

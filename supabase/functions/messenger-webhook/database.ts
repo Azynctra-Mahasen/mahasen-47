@@ -1,4 +1,3 @@
-
 export async function storeConversation(
   supabase: any,
   userId: string,
@@ -55,29 +54,6 @@ export async function storeConversation(
     return conversationId;
   } catch (error) {
     console.error('Error storing conversation:', error);
-    throw error;
-  }
-}
-
-export async function storeAIResponse(
-  supabase: any,
-  conversationId: string,
-  aiResponse: string
-) {
-  try {
-    const { error: msgError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        content: aiResponse,
-        status: 'sent',
-        sender_name: 'AI Assistant',
-        sender_number: 'system'
-      });
-
-    if (msgError) throw msgError;
-  } catch (error) {
-    console.error('Error storing AI response:', error);
     throw error;
   }
 }

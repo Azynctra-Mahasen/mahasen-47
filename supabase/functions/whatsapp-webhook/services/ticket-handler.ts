@@ -38,20 +38,14 @@ export class TicketHandler {
     console.log('Creating order ticket with info:', orderInfo);
     
     try {
-      // Generate a UUID for whatsapp_message_id if needed
-      const normalizedMessageId = context.messageId.startsWith('wamid.') 
-        ? crypto.randomUUID()  // Generate a new UUID for WhatsApp messages
-        : context.messageId;   // Use the existing ID for other platforms
-
       const ticket = await AutomatedTicketService.generateTicket({
-        messageId: normalizedMessageId,
+        messageId: context.messageId,
         conversationId: context.conversationId,
         analysis: analysis,
         customerName: context.userName,
         platform: context.platform,
         messageContent: `Order: ${orderInfo.product} x ${orderInfo.quantity}`,
-        context: `Product: ${orderInfo.product}\nQuantity: ${orderInfo.quantity}`,
-        whatsappMessageId: context.messageId // Store the original WhatsApp message ID
+        context: `Product: ${orderInfo.product}\nQuantity: ${orderInfo.quantity}`
       });
 
       if (ticket) {
@@ -67,20 +61,14 @@ export class TicketHandler {
 
   private static async createSupportTicket(analysis: any, context: TicketContext): Promise<void> {
     try {
-      // Generate a UUID for whatsapp_message_id if needed
-      const normalizedMessageId = context.messageId.startsWith('wamid.') 
-        ? crypto.randomUUID()  // Generate a new UUID for WhatsApp messages
-        : context.messageId;   // Use the existing ID for other platforms
-
       await AutomatedTicketService.generateTicket({
-        messageId: normalizedMessageId,
+        messageId: context.messageId,
         conversationId: context.conversationId,
         analysis: analysis,
         customerName: context.userName,
         platform: context.platform,
         messageContent: context.messageContent,
-        context: context.knowledgeBase || '',
-        whatsappMessageId: context.messageId // Store the original WhatsApp message ID
+        context: context.knowledgeBase || ''
       });
     } catch (error) {
       console.error('Error creating support ticket:', error);

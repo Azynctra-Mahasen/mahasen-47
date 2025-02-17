@@ -1,4 +1,3 @@
-
 export async function sendWhatsAppMessage(to: string, text: string, WHATSAPP_ACCESS_TOKEN: string, WHATSAPP_PHONE_ID: string) {
   try {
     const response = await fetch(`https://graph.facebook.com/v17.0/${WHATSAPP_PHONE_ID}/messages`, {
