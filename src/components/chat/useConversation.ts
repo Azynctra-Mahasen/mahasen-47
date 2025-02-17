@@ -33,28 +33,23 @@ export const useConversation = (id: string | undefined) => {
     queryFn: async () => {
       if (!id) throw new Error("Conversation ID is required");
 
-      console.log("Fetching messages for conversation:", id);
       const { data, error } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", id)
         .order("created_at", { ascending: true });
 
-      if (error) {
-        console.error("Error fetching messages:", error);
-        throw error;
-      }
-      
-      console.log("Fetched messages:", data);
+      if (error) throw error;
       return data as Message[];
     },
     enabled: !!id,
-    staleTime: 0, // Always fetch fresh data
   });
 
   const updateAIEnabled = useMutation({
     mutationFn: async (enabled: boolean) => {
       if (!id) throw new Error("Conversation ID is required");
+
+      console.log('Updating AI enabled state to:', enabled);
 
       const { error } = await supabase
         .from("conversations")
@@ -84,6 +79,8 @@ export const useConversation = (id: string | undefined) => {
     mutationFn: async () => {
       if (!id) throw new Error("Conversation ID is required");
 
+      console.log('Clearing messages for conversation:', id);
+
       const { error } = await supabase
         .from("messages")
         .delete()
@@ -92,6 +89,7 @@ export const useConversation = (id: string | undefined) => {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Invalidate and refetch messages
       queryClient.invalidateQueries({ queryKey: ["messages", id] });
       toast({
         title: "Success",
