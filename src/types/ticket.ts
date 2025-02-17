@@ -1,3 +1,4 @@
+
 export type TicketType = 'SUPPORT' | 'REQUEST' | 'ORDER';
 export type TicketStatus = 'New' | 'In Progress' | 'Escalated' | 'Completed';
 export type Platform = 'whatsapp' | 'facebook' | 'instagram';
@@ -12,7 +13,6 @@ export interface Ticket {
   status: TicketStatus;
   created_at: string;
   body: string;
-  message_id?: string;
   conversation_id?: string;
   intent_type?: TicketType;
   context?: string;
@@ -21,4 +21,7 @@ export interface Ticket {
   assigned_to?: string;
   priority?: TicketPriority;
   last_updated_at?: string;
+  order_status?: string;
+  confirmation_message_id?: string;
+  whatsapp_message_id?: string;
 }
