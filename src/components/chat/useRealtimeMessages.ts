@@ -37,19 +37,25 @@ export const useRealtimeMessages = (
           
           // Handle different event types
           if (payload.eventType === 'INSERT') {
-            // Update the query cache directly instead of refetching
             queryClient.setQueryData(
               ['messages', id],
               (oldData: any[] | undefined) => {
-                if (!oldData) return [payload.new];
+                if (!oldData) {
+                  // If cache is empty, trigger a refetch instead of replacing
+                  refetchMessages();
+                  return [];
+                }
                 // Only add if message doesn't already exist
                 const messageExists = oldData.some(msg => msg.id === payload.new.id);
                 if (!messageExists) {
-                  // If it's a received message, mark it as unread
                   if (payload.new.status === 'received') {
                     toast.success('New message received');
                   }
-                  return [...oldData, payload.new];
+                  // Ensure proper ordering by timestamp
+                  const newData = [...oldData, payload.new];
+                  return newData.sort((a, b) => 
+                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                  );
                 }
                 return oldData;
               }
@@ -58,9 +64,15 @@ export const useRealtimeMessages = (
             queryClient.setQueryData(
               ['messages', id],
               (oldData: any[] | undefined) => {
-                if (!oldData) return [payload.new];
-                return oldData.map(msg => 
+                if (!oldData) {
+                  refetchMessages();
+                  return [];
+                }
+                const updatedData = oldData.map(msg => 
                   msg.id === payload.new.id ? payload.new : msg
+                );
+                return updatedData.sort((a, b) => 
+                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                 );
               }
             );
@@ -74,8 +86,9 @@ export const useRealtimeMessages = (
         console.log("Realtime subscription status:", status);
         
         if (status === 'SUBSCRIBED') {
-          toast.success('Connected to real-time updates');
+          console.log('Successfully subscribed to real-time updates');
         } else if (status === 'CHANNEL_ERROR') {
+          console.error('Failed to connect to real-time updates');
           toast.error('Failed to connect to real-time updates');
         }
       });
@@ -105,5 +118,5 @@ export const useRealtimeMessages = (
       console.log("Cleaning up subscription for conversation:", id);
       supabase.removeChannel(channel);
     };
-  }, [id, queryClient]);
+  }, [id, queryClient, refetchMessages]);
 };
