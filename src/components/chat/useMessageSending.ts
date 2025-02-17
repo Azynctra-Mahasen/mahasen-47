@@ -3,9 +3,6 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { WhatsAppMessage } from "@/types/chat";
 import { useToast } from "@/hooks/use-toast";
-import { useIntentDetection } from "@/hooks/useIntentDetection";
-import { TicketService } from "@/services/ticketService";
-import { AutomatedTicketService } from "@/services/automatedTicketService";
 
 export const useMessageSending = (
   id: string | undefined,
@@ -15,7 +12,6 @@ export const useMessageSending = (
 ) => {
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
-  const { analyzeMessage } = useIntentDetection();
 
   const sendMessage = async (newMessage: string) => {
     if (!newMessage.trim() || !id || !contactNumber) return;
@@ -31,6 +27,11 @@ export const useMessageSending = (
           status: "sent",
           sender_name: "Agent",
           sender_number: "system",
+          // Add metadata to explicitly mark this as an agent message
+          metadata: {
+            is_agent_message: true,
+            skip_intent_analysis: true
+          }
         })
         .select()
         .single();
@@ -63,7 +64,9 @@ export const useMessageSending = (
 
       if (whatsappError) throw whatsappError;
 
+      // Explicitly refetch messages to ensure UI is up to date
       refetchMessages();
+      
       toast({
         title: "Message sent",
         description: "Your message has been sent successfully.",

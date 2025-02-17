@@ -76,9 +76,6 @@ export const useRealtimeMessages = (
                 );
               }
             );
-            if (payload.old.read === false && payload.new.read === true) {
-              console.log('Message marked as read:', payload.new.id);
-            }
           }
         }
       )
