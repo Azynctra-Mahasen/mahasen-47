@@ -587,6 +587,42 @@ export type Database = {
           },
         ]
       }
+      ticket_messages: {
+        Row: {
+          created_at: string | null
+          id: number
+          message_id: string
+          ticket_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          message_id: string
+          ticket_id: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          message_id?: string
+          ticket_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
           assigned_to: string | null
@@ -601,7 +637,6 @@ export type Database = {
           id: number
           intent_type: string | null
           last_updated_at: string | null
-          message_id: string | null
           order_status: string | null
           platform: Database["public"]["Enums"]["platform_type"]
           priority: string | null
@@ -624,7 +659,6 @@ export type Database = {
           id?: number
           intent_type?: string | null
           last_updated_at?: string | null
-          message_id?: string | null
           order_status?: string | null
           platform: Database["public"]["Enums"]["platform_type"]
           priority?: string | null
@@ -647,7 +681,6 @@ export type Database = {
           id?: number
           intent_type?: string | null
           last_updated_at?: string | null
-          message_id?: string | null
           order_status?: string | null
           platform?: Database["public"]["Enums"]["platform_type"]
           priority?: string | null
@@ -663,13 +696,6 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tickets_message_id_fkey"
-            columns: ["message_id"]
-            isOneToOne: false
-            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]
