@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { WhatsAppMessage } from "@/types/chat";
@@ -44,54 +45,6 @@ export const useMessageSending = (
         .single();
 
       if (convError) throw convError;
-
-      // Get recent messages for context
-      const { data: recentMessages, error: msgError } = await supabase
-        .from("messages")
-        .select("content")
-        .eq("conversation_id", id)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      if (msgError) throw msgError;
-
-      const previousMessages = recentMessages?.map(msg => msg.content) || [];
-      const { analysis } = analyzeMessage(
-        newMessage,
-        messageData.id,
-        null,
-        conversation?.contact_name || 'Unknown',
-        previousMessages
-      );
-
-      // Create ticket if needed
-      if (messageData && conversation && analysis) {
-        try {
-          const ticket = await AutomatedTicketService.generateTicket({
-            messageId: messageData.id,
-            conversationId: conversation.id,
-            analysis,
-            customerName: conversation.contact_name,
-            platform: conversation.platform,
-            messageContent: newMessage,
-            context: previousMessages.join('\n')
-          });
-
-          if (ticket) {
-            toast({
-              title: "Ticket Created",
-              description: "A support ticket has been created for this request.",
-            });
-          }
-        } catch (ticketError) {
-          console.error('Failed to create ticket:', ticketError);
-          toast({
-            variant: "destructive",
-            title: "Error Creating Ticket",
-            description: "Failed to create support ticket. Please try again.",
-          });
-        }
-      }
 
       // Send WhatsApp message
       const messagePayload: WhatsAppMessage = {
