@@ -1,30 +1,39 @@
+
 export function formatAIResponse(responseText: string): any {
   try {
-    // Remove <think> tags and their content
-    let cleanedResponse = responseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    // First remove the thinking part
+    const withoutThinking = responseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     
-    // Remove ```json and ``` markers if they exist
-    cleanedResponse = cleanedResponse.replace(/```json\n/g, '').replace(/```/g, '').trim();
+    // Find the first occurrence of '{'
+    const jsonStartIndex = withoutThinking.indexOf('{');
+    if (jsonStartIndex === -1) {
+      console.error('No JSON object found in response');
+      throw new Error('Invalid response format: No JSON object found');
+    }
+
+    // Extract everything from the first '{' to the end
+    const jsonString = withoutThinking.substring(jsonStartIndex);
+    
+    // Remove any markdown code block markers
+    const cleanJsonString = jsonString.replace(/```json|```/g, '').trim();
     
     // Parse the JSON
-    const parsedResponse = JSON.parse(cleanedResponse);
+    const parsedResponse = JSON.parse(cleanJsonString);
     
     console.log('Parsed AI response:', parsedResponse);
     
-    // If we just want to return the response text
-    if (parsedResponse.response) {
+    if (isValidResponse(parsedResponse)) {
       return parsedResponse;
     }
     
-    // Fallback to returning the full parsed response
-    return parsedResponse;
+    throw new Error('Invalid response structure');
   } catch (error) {
     console.error('Error formatting AI response:', error);
     console.log('Raw response:', responseText);
     
     // Return a default response structure if parsing fails
     return {
-      response: responseText,
+      response: "I apologize, but I received an invalid response format. Please try again.",
       intent: 'GENERAL_QUERY',
       confidence: 0.5,
       requires_escalation: false,
@@ -39,7 +48,7 @@ export function formatAIResponse(responseText: string): any {
   }
 }
 
-export function isValidAIResponse(response: any): boolean {
+function isValidResponse(response: any): boolean {
   return (
     response &&
     typeof response.intent === 'string' &&

@@ -1,3 +1,4 @@
+
 /**
  * Formats the AI response by removing thinking tags and extracting JSON
  * @param response The raw response from the AI model
@@ -5,14 +6,24 @@
  */
 export const formatAIResponse = (response: string) => {
   try {
-    // Remove content between <think> tags including the tags themselves
-    const cleanedResponse = response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    // First remove the thinking part
+    const withoutThinking = response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     
-    // Remove any "json" prefix if it exists
-    const jsonString = cleanedResponse.replace(/^json\s*/, '').trim();
+    // Find the first occurrence of '{'
+    const jsonStartIndex = withoutThinking.indexOf('{');
+    if (jsonStartIndex === -1) {
+      console.error('No JSON object found in response');
+      return null;
+    }
+
+    // Extract everything from the first '{' to the end
+    const jsonString = withoutThinking.substring(jsonStartIndex);
     
-    // Parse the remaining content as JSON
-    const parsedResponse = JSON.parse(jsonString);
+    // Remove any markdown code block markers
+    const cleanJsonString = jsonString.replace(/```json|```/g, '').trim();
+    
+    // Parse the JSON
+    const parsedResponse = JSON.parse(cleanJsonString);
     
     console.log('Parsed AI response:', parsedResponse);
     return parsedResponse;

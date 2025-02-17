@@ -247,6 +247,7 @@ export type Database = {
           conversation_id: string | null
           created_at: string | null
           id: string
+          metadata: Json | null
           order_info: Json | null
           read: boolean | null
           sender_name: string
@@ -259,6 +260,7 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json | null
           order_info?: Json | null
           read?: boolean | null
           sender_name: string
@@ -271,6 +273,7 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json | null
           order_info?: Json | null
           read?: boolean | null
           sender_name?: string
@@ -399,6 +402,33 @@ export type Database = {
           price?: number
           title?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          profile_url: string | null
+          updated_at: string
+          username: string | null
+          whatsapp_number: string | null
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          profile_url?: string | null
+          updated_at?: string
+          username?: string | null
+          whatsapp_number?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_url?: string | null
+          updated_at?: string
+          username?: string | null
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
@@ -560,6 +590,42 @@ export type Database = {
           },
         ]
       }
+      ticket_messages: {
+        Row: {
+          created_at: string | null
+          id: number
+          message_id: string
+          ticket_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          message_id: string
+          ticket_id: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          message_id?: string
+          ticket_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
           assigned_to: string | null
@@ -574,7 +640,6 @@ export type Database = {
           id: number
           intent_type: string | null
           last_updated_at: string | null
-          message_id: string | null
           order_status: string | null
           platform: Database["public"]["Enums"]["platform_type"]
           priority: string | null
@@ -582,6 +647,7 @@ export type Database = {
           status: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
+          whatsapp_message_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -596,7 +662,6 @@ export type Database = {
           id?: number
           intent_type?: string | null
           last_updated_at?: string | null
-          message_id?: string | null
           order_status?: string | null
           platform: Database["public"]["Enums"]["platform_type"]
           priority?: string | null
@@ -604,6 +669,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
+          whatsapp_message_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -618,7 +684,6 @@ export type Database = {
           id?: number
           intent_type?: string | null
           last_updated_at?: string | null
-          message_id?: string | null
           order_status?: string | null
           platform?: Database["public"]["Enums"]["platform_type"]
           priority?: string | null
@@ -626,6 +691,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["ticket_status"]
           title?: string
           type?: string
+          whatsapp_message_id?: string | null
         }
         Relationships: [
           {
@@ -633,13 +699,6 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tickets_message_id_fkey"
-            columns: ["message_id"]
-            isOneToOne: false
-            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]

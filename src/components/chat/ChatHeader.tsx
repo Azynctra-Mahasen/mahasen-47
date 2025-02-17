@@ -1,47 +1,61 @@
-import { Button } from "@/components/ui/button";
+
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import type { Platform } from "@/types/platform";
+import { capitalize } from "lodash";
+import { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface ChatHeaderProps {
-  contactName: string | undefined;
-  platform: string | undefined;
+  contactName?: string;
+  platform?: Platform;
   isAIEnabled: boolean;
   onAIToggle: (enabled: boolean) => void;
+  children?: ReactNode;
 }
 
-export const ChatHeader = ({
-  contactName,
-  platform,
-  isAIEnabled,
+export const ChatHeader = ({ 
+  contactName, 
+  platform, 
+  isAIEnabled, 
   onAIToggle,
+  children 
 }: ChatHeaderProps) => {
   const navigate = useNavigate();
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-[#F1F0FB] dark:bg-slate-800 border-b dark:border-slate-700 p-4 z-10">
-      <div className="max-w-4xl mx-auto flex items-center justify-between">
-        <div className="flex items-center">
-          <Button
-            variant="secondary"
-            className="mr-4 hover:bg-slate-200 dark:hover:bg-slate-700"
-            onClick={() => navigate(`/chats/${platform}`)}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <h1 className="text-xl font-semibold dark:text-white">
-            Chat with {contactName}
-          </h1>
+    <div className="p-4 border-b bg-white dark:bg-slate-900 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate(-1)}
+          className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back
+        </Button>
+        <div>
+          <h2 className="font-semibold">{contactName}</h2>
+          {platform && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              via {capitalize(platform)}
+            </p>
+          )}
         </div>
+      </div>
+      <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">AI Assistant</span>
           <Switch
+            id="ai-mode"
             checked={isAIEnabled}
             onCheckedChange={onAIToggle}
-            aria-label="Toggle AI Assistant"
           />
+          <Label htmlFor="ai-mode">AI Assistant</Label>
         </div>
+        {children}
       </div>
     </div>
   );
