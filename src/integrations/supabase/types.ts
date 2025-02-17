@@ -609,6 +609,7 @@ export type Database = {
           status: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
+          whatsapp_message_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -631,6 +632,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
+          whatsapp_message_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -653,6 +655,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["ticket_status"]
           title?: string
           type?: string
+          whatsapp_message_id?: string | null
         }
         Relationships: [
           {
