@@ -1,55 +1,16 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { storeConversation } from "./database.ts";
-import { generateAIResponse } from "./ollama.ts";
-import { MessageBatcherService } from "./services/message-batcher.ts";
+import { generateAIResponse } from './ollama.ts';
+import { sendWhatsAppMessage } from './whatsapp.ts';
+import { storeConversation } from './database.ts';
+import { getAISettings } from './ai-settings.ts';
+import { extractResponseText } from './utils/aiResponseFormatter.ts';
+import { OrderProcessor } from './services/order-processor.ts';
+import { ConversationService } from './services/conversation-service.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-async function processMessageBatch(
-  whatsappMessageId: string,
-  batchedMessage: string,
-  userId: string,
-  userName: string
-): Promise<void> {
-  try {
-    // Store conversation and get AI response
-    const conversationId = await storeConversation(
-      supabase,
-      userId,
-      userName,
-      batchedMessage,
-      'facebook'
-    );
-
-    // Check if AI is enabled for this conversation
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('ai_enabled')
-      .eq('id', conversationId)
-      .single();
-
-    if (conversation?.ai_enabled) {
-      const aiResponse = await generateAIResponse(batchedMessage, conversationId);
-      await sendFacebookMessage(userId, aiResponse, settings.access_token);
-      
-      // Store AI response in database
-      await supabase.from('messages').insert({
-        conversation_id: conversationId,
-        content: aiResponse,
-        sender_name: 'AI Assistant',
-        sender_number: 'system',
-        status: 'sent',
-      });
-    }
-
-  } catch (error) {
-    console.error('Error processing batched message:', error);
-    throw error;
-  }
-}
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function processWhatsAppMessage(
   whatsappMessageId: string,
@@ -57,57 +18,92 @@ export async function processWhatsAppMessage(
   userId: string,
   userName: string
 ): Promise<void> {
-  console.log('Processing WhatsApp message:', { whatsappMessageId, userMessage, userId, userName });
+  console.log('Processing message:', { whatsappMessageId, userMessage, userId, userName });
 
   try {
-    // Use the MessageBatcherService to handle message batching
-    await MessageBatcherService.processBatchedMessage(
+    // Check for pending order confirmation first
+    const orderHandled = await OrderProcessor.handlePendingOrderConfirmation({
+      messageId: whatsappMessageId,
       userId,
+      userName,
+      whatsappMessageId,
+      userMessage
+    });
+
+    if (orderHandled) {
+      console.log('Order confirmation handled successfully');
+      return;
+    }
+
+    // Continue with normal message processing
+    const conversationId = await ConversationService.getOrCreateConversation(userId, userName);
+    const messageData = await ConversationService.storeMessage(
+      conversationId,
       userMessage,
-      async (batchedMessage) => {
-        await processMessageBatch(whatsappMessageId, batchedMessage, userId, userName);
-      }
+      userName,
+      userId,
+      whatsappMessageId
     );
 
-    // Log batch status
-    const batchSize = MessageBatcherService.getCurrentBatchSize(userId);
-    console.log(`Current batch size for user ${userId}: ${batchSize}`);
-    
+    const aiSettings = await getAISettings();
+    const conversationHistory = await ConversationService.getRecentConversationHistory(
+      userId,
+      aiSettings.context_memory_length
+    );
+
+    const aiResponse = await generateAIResponse(userMessage, {
+      userName,
+      messageId: messageData.id,
+      conversationId,
+      knowledgeBase: conversationHistory,
+      userMessage,
+      platform: 'whatsapp' as const
+    }, aiSettings);
+
+    const responseText = extractResponseText(aiResponse);
+
+    // Store pending order if this is an order summary
+    if (isOrderSummary(aiResponse)) {
+      console.log('Detected order summary, storing pending order:', 
+        aiResponse.detected_entities.order_info
+      );
+      await OrderProcessor.storePendingOrder(
+        userId,
+        aiResponse.detected_entities.order_info
+      );
+    }
+
+    // Send response
+    await sendWhatsAppMessage(
+      userId,
+      responseText,
+      Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
+      Deno.env.get('WHATSAPP_PHONE_ID')!
+    );
+
+    // Store conversation
+    await storeConversation(supabase, userId, userName, userMessage, responseText);
+
   } catch (error) {
-    console.error('Error in message processing:', error);
+    console.error('Error processing message:', error);
+    await supabase.from('webhook_errors').insert({
+      error_type: 'WHATSAPP_WEBHOOK_ERROR',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      details: {
+        whatsappMessageId,
+        userId,
+        userName,
+        timestamp: new Date().toISOString()
+      }
+    });
     throw error;
   }
 }
 
-async function fetchUserProfile(userId: string, accessToken: string) {
-  const response = await fetch(
-    `https://graph.facebook.com/${userId}?fields=name&access_token=${accessToken}`
+function isOrderSummary(aiResponse: any): boolean {
+  return (
+    aiResponse.intent === 'ORDER_PLACEMENT' &&
+    aiResponse.detected_entities?.order_info?.state === 'CONFIRMING' &&
+    !aiResponse.detected_entities?.order_info?.confirmed
   );
-  
-  if (!response.ok) {
-    throw new Error('Failed to fetch user profile');
-  }
-  
-  return await response.json();
-}
-
-async function sendFacebookMessage(recipientId: string, message: string, accessToken: string) {
-  const response = await fetch(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=${accessToken}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipient: { id: recipientId },
-        message: { text: message }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Failed to send message: ${JSON.stringify(error)}`);
-  }
-
-  return await response.json();
 }
