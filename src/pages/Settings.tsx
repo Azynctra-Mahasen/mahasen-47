@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,7 +13,7 @@ import {
   CardDescription,
   CardContent
 } from "@/components/ui/card";
-import { Camera, User, Mail, Lock, Phone } from "lucide-react";
+import { Camera, User, Mail, Lock, Phone, ArrowLeft } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Database } from "@/integrations/supabase/types";
 
@@ -204,9 +205,17 @@ const Settings = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
+        <div className="flex items-center gap-4 mb-8">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
           <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-slate-600 dark:text-slate-400">Manage your account settings</p>
         </div>
 
         <div className="space-y-6">
