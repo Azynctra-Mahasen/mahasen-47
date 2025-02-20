@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { processWhatsAppMessage } from './message-processor.ts';
+import { processMessageBatch } from './message-processor.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,6 +10,10 @@ const corsHeaders = {
 
 // Create a Set to store processed message IDs
 const processedMessages = new Set();
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -39,10 +44,10 @@ serve(async (req) => {
 
   if (req.method === 'POST') {
     try {
-      const message = await req.json();
-      console.log('WhatsApp API response:', JSON.stringify(message));
+      const body = await req.json();
+      console.log('WhatsApp webhook payload:', JSON.stringify(body));
 
-      const changes = message.entry[0].changes[0].value;
+      const changes = body.entry[0].changes[0].value;
       
       if (!changes.messages || changes.messages.length === 0) {
         return new Response('No messages in webhook', { 
@@ -74,10 +79,15 @@ serve(async (req) => {
       const userId = changes.contacts[0].wa_id;
       const userName = changes.contacts[0].profile.name;
 
-      console.log(`Received message from ${userName} (${userId}): ${userMessage}`);
+      console.log(`Processing message from ${userName} (${userId}): ${userMessage}`);
 
-      // Process the message
-      await processWhatsAppMessage(messageId, userMessage, userId, userName);
+      // Process the message batch
+      await processMessageBatch(supabase, [{
+        userId,
+        userName,
+        userMessage,
+        platform: 'whatsapp'
+      }]);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

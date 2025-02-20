@@ -1,14 +1,14 @@
 
 import { IntentAnalysis } from '../types/intent.ts';
-import { SearchResult } from './knowledge-base.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function processIntent(message: string): Promise<IntentAnalysis> {
+export const processIntent = async (message: string): Promise<IntentAnalysis> => {
   try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
     // Default intent analysis structure
     let intent: IntentAnalysis = {
       intent: 'GENERAL_QUERY',
@@ -34,7 +34,7 @@ export async function processIntent(message: string): Promise<IntentAnalysis> {
       intent.intent = 'ORDER_PLACEMENT';
       intent.confidence = 0.85;
       
-      // Try to find any product mentions using the match_knowledge_base_and_products function
+      // Try to find any product mentions
       const { data: searchResults, error } = await supabase.rpc(
         'match_knowledge_base_and_products',
         { 
@@ -105,4 +105,4 @@ export async function processIntent(message: string): Promise<IntentAnalysis> {
       }
     };
   }
-}
+};
