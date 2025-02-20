@@ -7,68 +7,102 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export class IntentProcessor {
-  static async processIntent(message: string, searchResults: SearchResult[]): Promise<IntentAnalysis> {
-    try {
-      const productResults = searchResults.filter(r => r.source === 'product');
-      
-      // Check if message contains product inquiries
-      const hasProductMentions = productResults.length > 0;
-      const hasPriceInquiry = message.toLowerCase().includes('price') ||
-                             message.toLowerCase().includes('cost') ||
-                             message.toLowerCase().includes('how much');
-      
-      const isProductQuery = hasProductMentions || hasPriceInquiry;
-
-      let intent: IntentAnalysis = {
-        intent: isProductQuery ? 'ORDER_PLACEMENT' : 'GENERAL_QUERY',
-        confidence: isProductQuery ? 0.8 : 0.6,
-        requires_escalation: false,
-        escalation_reason: null,
-        detected_entities: {
-          product_mentions: productResults.map(p => p.metadata?.title || '').filter(Boolean),
-          issue_type: null,
-          urgency_level: 'low',
-          order_info: isProductQuery ? {
-            state: 'COLLECTING_INFO',
-            products: productResults.map(p => ({
-              title: p.metadata?.title,
-              price: p.metadata?.price,
-              discount: p.metadata?.discounts
-            }))
-          } : null
-        }
-      };
-
-      // Increase confidence for exact product matches
-      if (hasProductMentions) {
-        intent.confidence = 0.9;
+export async function processIntent(message: string): Promise<IntentAnalysis> {
+  try {
+    // Default intent analysis structure
+    let intent: IntentAnalysis = {
+      intent: 'GENERAL_QUERY',
+      confidence: 0.7,
+      requires_escalation: false,
+      escalation_reason: null,
+      detected_entities: {
+        product_mentions: [],
+        issue_type: null,
+        urgency_level: 'low',
+        order_info: null
       }
+    };
 
-      return intent;
-    } catch (error) {
-      console.error('Error in intent processing:', error);
-      throw error;
+    // Check for order-related keywords
+    const orderKeywords = ['order', 'buy', 'purchase', 'get', 'want'];
+    const hasOrderIntent = orderKeywords.some(keyword => 
+      message.toLowerCase().includes(keyword)
+    );
+
+    if (hasOrderIntent) {
+      console.log('Detected order intent');
+      intent.intent = 'ORDER_PLACEMENT';
+      intent.confidence = 0.85;
+      
+      // Try to find any product mentions using the match_knowledge_base_and_products function
+      const { data: searchResults, error } = await supabase.rpc(
+        'match_knowledge_base_and_products',
+        { 
+          query_text: message,
+          query_embedding: [], // We'll implement proper embeddings later
+          match_count: 5
+        }
+      );
+
+      if (!error && searchResults) {
+        const products = searchResults
+          .filter(result => result.source === 'product')
+          .map(product => ({
+            title: product.metadata?.title,
+            price: product.metadata?.price
+          }));
+
+        if (products.length > 0) {
+          intent.detected_entities.order_info = {
+            state: 'COLLECTING_INFO',
+            products: products
+          };
+          intent.confidence = 0.9;
+        }
+      }
     }
-  }
 
-  static validateIntentStructure(response: any): boolean {
-    return (
-      response &&
-      typeof response.intent === 'string' &&
-      typeof response.confidence === 'number' &&
-      typeof response.requires_escalation === 'boolean' &&
-      response.detected_entities &&
-      typeof response.response === 'string'
+    // Check for support-related keywords
+    const supportKeywords = ['help', 'support', 'issue', 'problem', 'broken'];
+    const hasSupportIntent = supportKeywords.some(keyword => 
+      message.toLowerCase().includes(keyword)
     );
-  }
 
-  static evaluateEscalationNeeds(analysis: any): boolean {
-    return (
-      analysis.requires_escalation ||
-      analysis.intent === 'HUMAN_AGENT_REQUEST' ||
-      (analysis.intent === 'SUPPORT_REQUEST' && 
-       analysis.detected_entities?.urgency_level === 'high')
+    if (hasSupportIntent) {
+      intent.intent = 'SUPPORT_REQUEST';
+      intent.confidence = 0.8;
+      intent.detected_entities.urgency_level = message.toLowerCase().includes('urgent') ? 'high' : 'medium';
+    }
+
+    // Check for explicit human agent requests
+    const humanAgentKeywords = ['human', 'agent', 'person', 'representative'];
+    const wantsHuman = humanAgentKeywords.some(keyword => 
+      message.toLowerCase().includes(keyword)
     );
+
+    if (wantsHuman) {
+      intent.intent = 'HUMAN_AGENT_REQUEST';
+      intent.requires_escalation = true;
+      intent.escalation_reason = 'Customer explicitly requested human agent';
+      intent.confidence = 0.95;
+    }
+
+    console.log('Processed intent:', intent);
+    return intent;
+  } catch (error) {
+    console.error('Error in intent processing:', error);
+    // Return a safe default intent if processing fails
+    return {
+      intent: 'GENERAL_QUERY',
+      confidence: 0.5,
+      requires_escalation: false,
+      escalation_reason: null,
+      detected_entities: {
+        product_mentions: [],
+        issue_type: null,
+        urgency_level: 'low',
+        order_info: null
+      }
+    };
   }
 }
