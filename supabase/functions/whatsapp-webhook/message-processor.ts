@@ -27,7 +27,7 @@ export async function processMessageBatch(
         message.platform
       );
 
-      // Get conversation settings including AI state
+      // Get conversation settings with strict error handling
       const { data: conversation, error: convError } = await supabase
         .from('conversations')
         .select('ai_enabled')
@@ -36,40 +36,44 @@ export async function processMessageBatch(
 
       if (convError) {
         console.error('Error fetching conversation:', convError);
-        throw convError;
+        throw new Error(`Failed to fetch conversation settings: ${convError.message}`);
       }
 
-      console.log('Conversation AI enabled state:', conversation.ai_enabled);
+      if (conversation === null) {
+        throw new Error(`Conversation ${conversationId} not found`);
+      }
 
-      // Only process AI response if ai_enabled is true
-      if (conversation.ai_enabled === true) {
+      // Explicit boolean check for ai_enabled
+      const isAIEnabled = Boolean(conversation.ai_enabled);
+      console.log('Conversation AI enabled state:', isAIEnabled);
+
+      if (isAIEnabled === true) {
         console.log('AI is enabled for this conversation, generating response...');
-        
-        // Process intent
-        const intent = await processIntent(message.userMessage);
-        
-        // Generate AI response
-        const aiResponse = await generateAIResponse(
-          message.userMessage,
-          message.userName,
-          intent
-        );
+        try {
+          const intent = await processIntent(message.userMessage);
+          const aiResponse = await generateAIResponse(
+            message.userMessage,
+            message.userName,
+            intent
+          );
 
-        // Store AI response
-        if (aiResponse) {
-          await storeAIResponse(supabase, conversationId, aiResponse);
-          console.log('AI response stored successfully');
+          if (aiResponse) {
+            await storeAIResponse(supabase, conversationId, aiResponse);
+            console.log('AI response stored successfully');
+          }
+        } catch (aiError) {
+          console.error('Error generating AI response:', aiError);
+          throw new Error(`AI processing failed: ${aiError.message}`);
         }
       } else {
         console.log('AI is disabled for this conversation, skipping AI processing');
       }
 
-      // Log message operation
       await logMessageOperations(supabase, {
         conversationId,
         messageContent: message.userMessage,
         senderName: message.userName,
-        aiEnabled: conversation.ai_enabled
+        aiEnabled: isAIEnabled
       });
     }
   } catch (error) {

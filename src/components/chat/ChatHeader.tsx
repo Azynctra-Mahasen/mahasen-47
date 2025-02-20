@@ -52,6 +52,8 @@ export const ChatHeader = ({
             id="ai-mode"
             checked={isAIEnabled}
             onCheckedChange={onAIToggle}
+            disabled={false} // Set this to true when loading
+            className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-200"
           />
           <Label htmlFor="ai-mode">AI Assistant</Label>
         </div>

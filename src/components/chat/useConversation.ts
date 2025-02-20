@@ -72,21 +72,40 @@ export const useConversation = (id: string | undefined) => {
         .update({ ai_enabled: enabled })
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error updating AI state:", error);
+        throw new Error(`Failed to update AI state: ${error.message}`);
+      }
+    },
+    onMutate: async (enabled) => {
+      // Optimistically update the UI
+      await queryClient.cancelQueries({ queryKey: ["conversation", id] });
+      const previousConversation = queryClient.getQueryData(["conversation", id]);
+      
+      queryClient.setQueryData(["conversation", id], (old: any) => ({
+        ...old,
+        ai_enabled: enabled,
+      }));
+
+      return { previousConversation };
+    },
+    onError: (error, enabled, context) => {
+      // Revert optimistic update on error
+      if (context?.previousConversation) {
+        queryClient.setQueryData(["conversation", id], context.previousConversation);
+      }
+      console.error("Error updating AI enabled state:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update AI Assistant state. Please try again.",
+      });
     },
     onSuccess: (_, enabled) => {
       queryClient.invalidateQueries({ queryKey: ["conversation", id] });
       toast({
         title: "AI Assistant Updated",
         description: `AI Assistant has been ${enabled ? 'enabled' : 'disabled'} for this chat.`,
-      });
-    },
-    onError: (error) => {
-      console.error("Error updating AI enabled state:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to update AI Assistant state",
       });
     },
   });
@@ -105,7 +124,6 @@ export const useConversation = (id: string | undefined) => {
       if (error) throw error;
     },
     onSuccess: () => {
-      // Invalidate and refetch messages
       queryClient.invalidateQueries({ queryKey: ["messages", id] });
       toast({
         title: "Success",
