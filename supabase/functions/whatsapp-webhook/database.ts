@@ -22,14 +22,14 @@ export async function storeConversation(
 
     let conversationId;
     if (!conversation) {
-      // Create new conversation
+      // Create new conversation with explicit ai_enabled value
       const { data: newConversation, error: createError } = await supabase
         .from('conversations')
         .insert({
           contact_number: userId,
           contact_name: userName,
           platform: platform,
-          ai_enabled: true
+          ai_enabled: false  // Explicit default value
         })
         .select()
         .single();
