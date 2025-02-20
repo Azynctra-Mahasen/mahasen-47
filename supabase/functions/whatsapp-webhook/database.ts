@@ -60,45 +60,14 @@ export async function storeAIResponse(
         content: response,
         status: 'sent',
         sender_name: 'AI Assistant',
-        sender_number: 'system', // Add system as sender_number for AI responses
         read: true
       });
 
     if (error) {
-      console.error('Error storing AI response:', error);
       throw error;
     }
   } catch (error) {
-    console.error('Error in storeAIResponse:', error);
-    throw error;
-  }
-}
-
-export async function storeUserMessage(
-  supabase: any,
-  conversationId: string,
-  content: string,
-  senderName: string,
-  senderNumber: string
-): Promise<void> {
-  try {
-    const { error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        content: content,
-        status: 'received',
-        sender_name: senderName,
-        sender_number: senderNumber,
-        read: false
-      });
-
-    if (error) {
-      console.error('Error storing user message:', error);
-      throw error;
-    }
-  } catch (error) {
-    console.error('Error in storeUserMessage:', error);
+    console.error('Error storing AI response:', error);
     throw error;
   }
 }
