@@ -2,71 +2,82 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 export async function storeConversation(
-  supabase: any,
-  userId: string,
-  userName: string,
-  message: string,
+  supabase: any, 
+  userId: string, 
+  userName: string, 
+  userMessage: string,
   platform: 'whatsapp' | 'facebook' | 'instagram'
-): Promise<string> {
+) {
   try {
-    // Check for existing conversation
-    const { data: existingConv, error: queryError } = await supabase
+    // Check if conversation exists
+    const { data: conversation, error: convError } = await supabase
       .from('conversations')
       .select('id')
       .eq('contact_number', userId)
       .single();
 
-    if (queryError && queryError.code !== 'PGRST116') {
-      throw queryError;
+    if (convError && convError.code !== 'PGRST116') {
+      throw convError;
     }
 
-    if (existingConv) {
-      return existingConv.id;
+    let conversationId;
+    if (!conversation) {
+      // Create new conversation with explicit ai_enabled value
+      const { data: newConversation, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          contact_number: userId,
+          contact_name: userName,
+          platform: platform,
+          ai_enabled: false  // Explicit default value
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      conversationId = newConversation.id;
+    } else {
+      conversationId = conversation.id;
     }
 
-    // Create new conversation if none exists
-    const { data: newConv, error: insertError } = await supabase
-      .from('conversations')
+    // Store user message
+    const { error: msgError } = await supabase
+      .from('messages')
       .insert({
-        contact_number: userId,
-        contact_name: userName,
-        platform: platform,
-        ai_enabled: true // Default to AI enabled
-      })
-      .select('id')
-      .single();
+        conversation_id: conversationId,
+        content: userMessage,
+        status: 'received',
+        sender_name: userName,
+        sender_number: userId,
+        read: false
+      });
 
-    if (insertError) {
-      throw insertError;
-    }
-
-    return newConv.id;
+    if (msgError) throw msgError;
+    return conversationId;
   } catch (error) {
-    console.error('Error in storeConversation:', error);
+    console.error('Error storing conversation:', error);
     throw error;
   }
 }
 
+// Add a new function to store AI responses
 export async function storeAIResponse(
   supabase: any,
   conversationId: string,
-  response: string
-): Promise<void> {
+  aiResponse: string
+) {
   try {
-    const { error } = await supabase
+    const { error: msgError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversationId,
-        content: response,
+        content: aiResponse,
         status: 'sent',
         sender_name: 'AI Assistant',
-        sender_number: 'ai-system', // Add fixed sender_number for AI
-        read: true
+        sender_number: 'system',
       });
 
-    if (error) {
-      throw error;
-    }
+    if (msgError) throw msgError;
   } catch (error) {
     console.error('Error storing AI response:', error);
     throw error;

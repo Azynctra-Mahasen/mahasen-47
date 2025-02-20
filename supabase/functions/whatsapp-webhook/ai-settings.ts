@@ -1,27 +1,43 @@
 
-import { AISettings, IntentAnalysis } from './types/intent.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
-export async function getAISettings(): Promise<AISettings> {
-  return {
-    tone: 'Professional',
-    behaviour: null,
-    model_name: 'llama-3.3-70b-versatile',
-    context_memory_length: 2,
-    conversation_timeout_hours: 1
-  };
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+export interface AISettings {
+  tone: string;
+  behaviour: string | null;
+  model_name: 'llama-3.3-70b-versatile' | 'gemini-2.0-flash-exp';
+  context_memory_length: number;
+  conversation_timeout_hours: number;
 }
 
-export async function generateAIResponse(
-  userMessage: string,
-  userName: string,
-  intent: IntentAnalysis
-): Promise<string> {
-  const settings = await getAISettings();
+export async function getAISettings(): Promise<AISettings> {
+  console.log('Fetching AI settings...');
   
-  // Basic response logic
-  if (intent.intent === 'ORDER_PLACEMENT') {
-    return `Hello ${userName}, I understand you're interested in placing an order. Could you please confirm the product and quantity you'd like to order?`;
+  const { data, error } = await supabase
+    .from('ai_settings')
+    .select('*')
+    .eq('id', 1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching AI settings:', error);
+    throw new Error('Failed to fetch AI settings');
   }
-  
-  return `Hello ${userName}, thank you for your message. How can I assist you today?`;
+
+  if (!data) {
+    console.log('No AI settings found, using defaults');
+    return {
+      tone: 'Professional',
+      behaviour: null,
+      model_name: 'llama-3.3-70b-versatile',
+      context_memory_length: 2,
+      conversation_timeout_hours: 1
+    };
+  }
+
+  console.log('AI settings retrieved:', data);
+  return data as AISettings;
 }
