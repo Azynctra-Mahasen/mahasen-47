@@ -43,6 +43,23 @@ export async function processMessageBatch(
         throw new Error(`Conversation ${conversationId} not found`);
       }
 
+      // Store the user message regardless of AI state
+      const { error: msgError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          content: message.userMessage,
+          status: 'received',
+          sender_name: message.userName,
+          sender_number: message.userId,
+          read: false
+        });
+
+      if (msgError) {
+        console.error('Error storing user message:', msgError);
+        throw msgError;
+      }
+
       // Explicit boolean check for ai_enabled
       const isAIEnabled = Boolean(conversation.ai_enabled);
       console.log('Conversation AI enabled state:', isAIEnabled);
