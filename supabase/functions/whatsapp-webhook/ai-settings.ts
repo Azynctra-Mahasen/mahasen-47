@@ -1,5 +1,5 @@
 
-import { AISettings } from "./types/intent.ts";
+import { AISettings, IntentAnalysis } from './types/intent.ts';
 
 export async function getAISettings(): Promise<AISettings> {
   return {
@@ -14,14 +14,14 @@ export async function getAISettings(): Promise<AISettings> {
 export async function generateAIResponse(
   userMessage: string,
   userName: string,
-  intent: any
-): Promise<string | null> {
-  try {
-    const settings = await getAISettings();
-    // For now, return a simple response
-    return `Hello ${userName}, thank you for your message. I understand you said: ${userMessage}`;
-  } catch (error) {
-    console.error('Error generating AI response:', error);
-    return null;
+  intent: IntentAnalysis
+): Promise<string> {
+  const settings = await getAISettings();
+  
+  // Basic response logic
+  if (intent.intent === 'ORDER_PLACEMENT') {
+    return `Hello ${userName}, I understand you're interested in placing an order. Could you please confirm the product and quantity you'd like to order?`;
   }
+  
+  return `Hello ${userName}, thank you for your message. How can I assist you today?`;
 }
