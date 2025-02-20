@@ -1,93 +1,91 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { storeConversation, storeAIResponse } from './database.ts';
-import { processIntent } from './services/intent-processor.ts';
-import { generateAIResponse } from './ai-settings.ts';
-import { logMessageOperations } from './utils/logger.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { storeConversation, storeAIResponse } from "./database.ts";
+import { generateAIResponse } from "./ollama.ts";
+import { MessageBatcherService } from "./services/message-batcher.ts";
+import { getAISettings } from "./ai-settings.ts";
+import { sendWhatsAppMessage } from "./whatsapp.ts";
 
-export async function processMessageBatch(
-  supabase: any,
-  messages: { 
-    userId: string; 
-    userName: string; 
-    userMessage: string; 
-    platform: 'whatsapp' | 'facebook' | 'instagram' 
-  }[]
-) {
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+const WHATSAPP_PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+async function processMessageBatch(
+  whatsappMessageId: string,
+  batchedMessage: string,
+  userId: string,
+  userName: string
+): Promise<void> {
   try {
-    for (const message of messages) {
-      console.log('Processing message:', message);
+    console.log('Processing message batch:', { whatsappMessageId, batchedMessage, userId, userName });
+    
+    const conversationId = await storeConversation(
+      supabase,
+      userId,
+      userName,
+      batchedMessage,
+      'whatsapp'
+    );
 
-      // Store conversation and get conversation ID
-      const conversationId = await storeConversation(
-        supabase,
-        message.userId,
-        message.userName,
-        message.userMessage,
-        message.platform
-      );
+    const { data: conversation } = await supabase
+      .from('conversations')
+      .select('ai_enabled, contact_number')
+      .eq('id', conversationId)
+      .single();
 
-      // Get conversation settings
-      const { data: conversation, error: convError } = await supabase
-        .from('conversations')
-        .select('ai_enabled')
-        .eq('id', conversationId)
-        .single();
+    if (conversation?.ai_enabled) {
+      const aiSettings = await getAISettings();
+      console.log('Using AI settings:', aiSettings);
 
-      if (convError) {
-        console.error('Error fetching conversation:', convError);
-        throw convError;
+      const aiResponse = await generateAIResponse(batchedMessage, {
+        messageId: whatsappMessageId,
+        conversationId: conversationId,
+        userName: userName,
+        knowledgeBase: ''
+      }, aiSettings);
+
+      // Store AI response in database
+      await storeAIResponse(supabase, conversationId, aiResponse);
+
+      // Send the WhatsApp message
+      if (conversation.contact_number) {
+        await sendWhatsAppMessage(
+          conversation.contact_number,
+          aiResponse,
+          WHATSAPP_ACCESS_TOKEN,
+          WHATSAPP_PHONE_ID
+        );
       }
-
-      // Store user message
-      const { error: msgError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          content: message.userMessage,
-          status: 'received',
-          sender_name: message.userName,
-          sender_number: message.userId,
-          read: false
-        });
-
-      if (msgError) {
-        console.error('Error storing user message:', msgError);
-        throw msgError;
-      }
-
-      // Process with AI if enabled
-      if (conversation?.ai_enabled) {
-        console.log('AI is enabled for this conversation, generating response...');
-        try {
-          const intent = await processIntent(message.userMessage);
-          const aiResponse = await generateAIResponse(
-            message.userMessage,
-            message.userName,
-            intent
-          );
-
-          if (aiResponse) {
-            await storeAIResponse(supabase, conversationId, aiResponse);
-            console.log('AI response stored successfully');
-          }
-        } catch (aiError) {
-          console.error('Error in AI processing:', aiError);
-          throw aiError;
-        }
-      } else {
-        console.log('AI is disabled for this conversation, skipping AI processing');
-      }
-
-      await logMessageOperations(supabase, {
-        conversationId,
-        messageContent: message.userMessage,
-        senderName: message.userName,
-        aiEnabled: conversation?.ai_enabled || false
-      });
     }
   } catch (error) {
-    console.error('Error in processMessageBatch:', error);
+    console.error('Error processing batched message:', error);
+    throw error;
+  }
+}
+
+export async function processWhatsAppMessage(
+  whatsappMessageId: string,
+  userMessage: string,
+  userId: string,
+  userName: string
+): Promise<void> {
+  console.log('Processing WhatsApp message:', { whatsappMessageId, userMessage, userId, userName });
+
+  try {
+    await MessageBatcherService.processBatchedMessage(
+      userId,
+      userMessage,
+      async (batchedMessage) => {
+        await processMessageBatch(whatsappMessageId, batchedMessage, userId, userName);
+      }
+    );
+
+    const batchSize = MessageBatcherService.getCurrentBatchSize(userId);
+    console.log(`Current batch size for user ${userId}: ${batchSize}`);
+  } catch (error) {
+    console.error('Error in message processing:', error);
     throw error;
   }
 }

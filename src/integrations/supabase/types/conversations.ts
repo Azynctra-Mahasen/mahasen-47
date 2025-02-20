@@ -4,7 +4,7 @@ import { DatabaseEnums } from './common';
 export type ConversationTables = {
   conversations: {
     Row: {
-      ai_enabled: boolean;
+      ai_enabled: boolean | null;
       contact_name: string;
       contact_number: string;
       created_at: string | null;
@@ -13,7 +13,7 @@ export type ConversationTables = {
       updated_at: string | null;
     };
     Insert: {
-      ai_enabled?: boolean;
+      ai_enabled?: boolean | null;
       contact_name: string;
       contact_number: string;
       created_at?: string | null;
@@ -22,7 +22,7 @@ export type ConversationTables = {
       updated_at?: string | null;
     };
     Update: {
-      ai_enabled?: boolean;
+      ai_enabled?: boolean | null;
       contact_name?: string;
       contact_number?: string;
       created_at?: string | null;
