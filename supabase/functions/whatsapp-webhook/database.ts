@@ -60,6 +60,7 @@ export async function storeAIResponse(
         content: response,
         status: 'sent',
         sender_name: 'AI Assistant',
+        sender_number: 'ai-system', // Add fixed sender_number for AI
         read: true
       });
 
