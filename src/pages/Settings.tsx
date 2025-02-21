@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +12,6 @@ import { PlatformsSection } from "@/components/settings/PlatformsSection";
 import { SecretsSection } from "@/components/settings/SecretsSection";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
-type PlatformSecrets = Database['public']['Tables']['platform_secrets']['Row'];
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -59,7 +59,7 @@ const Settings = () => {
           setProfileUrl(profileData.profile_url ?? "");
         }
 
-        // Get user's secrets from vault
+        // Get user's secrets from encrypted storage
         const { data: secretsData, error: secretsError } = await supabase
           .from('decrypted_user_secrets')
           .select('secret_type, secret_value')
@@ -214,7 +214,7 @@ const Settings = () => {
         throw profileError;
       }
 
-      // Store each secret in the vault
+      // Store each secret in encrypted storage
       const { data: phoneIdData, error: phoneIdError } = await supabase
         .rpc('store_user_secret', {
           p_user_id: session.user.id,
