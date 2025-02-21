@@ -8,15 +8,15 @@ import { sendWhatsAppMessage } from "./whatsapp.ts";
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
-const WHATSAPP_PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function processMessageBatch(
   whatsappMessageId: string,
   batchedMessage: string,
   userId: string,
-  userName: string
+  userName: string,
+  phoneId: string,
+  accessToken: string
 ): Promise<void> {
   try {
     console.log('Processing message batch:', { whatsappMessageId, batchedMessage, userId, userName });
@@ -49,13 +49,13 @@ async function processMessageBatch(
       // Store AI response in database
       await storeAIResponse(supabase, conversationId, aiResponse);
 
-      // Send the WhatsApp message
+      // Send the WhatsApp message using user-specific secrets
       if (conversation.contact_number) {
         await sendWhatsAppMessage(
           conversation.contact_number,
           aiResponse,
-          WHATSAPP_ACCESS_TOKEN,
-          WHATSAPP_PHONE_ID
+          accessToken,
+          phoneId
         );
       }
     }
@@ -69,7 +69,9 @@ export async function processWhatsAppMessage(
   whatsappMessageId: string,
   userMessage: string,
   userId: string,
-  userName: string
+  userName: string,
+  phoneId: string,
+  accessToken: string
 ): Promise<void> {
   console.log('Processing WhatsApp message:', { whatsappMessageId, userMessage, userId, userName });
 
@@ -78,7 +80,14 @@ export async function processWhatsAppMessage(
       userId,
       userMessage,
       async (batchedMessage) => {
-        await processMessageBatch(whatsappMessageId, batchedMessage, userId, userName);
+        await processMessageBatch(
+          whatsappMessageId,
+          batchedMessage,
+          userId,
+          userName,
+          phoneId,
+          accessToken
+        );
       }
     );
 
