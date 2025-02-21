@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +12,7 @@ import {
   CardDescription,
   CardContent
 } from "@/components/ui/card";
-import { Camera, User, Mail, Lock, Phone, ArrowLeft } from "lucide-react";
+import { Camera, User, Mail, Lock, Phone, ArrowLeft, Key } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Database } from "@/integrations/supabase/types";
 
@@ -27,6 +26,11 @@ const Settings = () => {
   const [email, setEmail] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [profileUrl, setProfileUrl] = useState("");
+  const [secrets, setSecrets] = useState({
+    whatsapp_phone_id: "",
+    whatsapp_verify_token: "",
+    whatsapp_access_token: ""
+  });
 
   useEffect(() => {
     const getProfile = async () => {
@@ -55,8 +59,24 @@ const Settings = () => {
           setWhatsappNumber(data.whatsapp_number ?? "");
           setProfileUrl(data.profile_url ?? "");
         }
+
+        // Get user's platform secrets
+        const { data: secretsData, error: secretsError } = await supabase
+          .from('platform_secrets')
+          .select('whatsapp_phone_id, whatsapp_verify_token, whatsapp_access_token')
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (secretsError && secretsError.code !== 'PGRST116') { // Not found error
+          console.error('Error fetching secrets:', secretsError);
+          throw secretsError;
+        }
+
+        if (secretsData) {
+          setSecrets(secretsData);
+        }
       } catch (error) {
-        console.error('Error fetching profile:', error);
+        console.error('Error fetching data:', error);
         toast({
           variant: "destructive",
           title: "Error",
@@ -173,7 +193,8 @@ const Settings = () => {
         throw new Error("No active session");
       }
 
-      const { error } = await supabase
+      // Update profile
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           username,
@@ -182,8 +203,23 @@ const Settings = () => {
         })
         .eq('id', session.user.id);
 
-      if (error) {
-        throw error;
+      if (profileError) {
+        throw profileError;
+      }
+
+      // Update or insert platform secrets
+      const { error: secretsError } = await supabase
+        .from('platform_secrets')
+        .upsert({
+          user_id: session.user.id,
+          ...secrets,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (secretsError) {
+        throw secretsError;
       }
 
       toast({
@@ -349,6 +385,64 @@ const Settings = () => {
                   <p className="text-sm text-slate-500 mt-1">
                     Include country code (e.g., +1234567890)
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Secrets Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Platform Secrets</CardTitle>
+              <CardDescription>
+                Manage your WhatsApp integration secrets
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="whatsapp_phone_id">WhatsApp Phone ID</Label>
+                  <div className="relative mt-1">
+                    <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="whatsapp_phone_id"
+                      type="password"
+                      value={secrets.whatsapp_phone_id}
+                      onChange={(e) => setSecrets(prev => ({ ...prev, whatsapp_phone_id: e.target.value }))}
+                      className="pl-10"
+                      placeholder="Enter WhatsApp Phone ID"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="whatsapp_verify_token">WhatsApp Verify Token</Label>
+                  <div className="relative mt-1">
+                    <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="whatsapp_verify_token"
+                      type="password"
+                      value={secrets.whatsapp_verify_token}
+                      onChange={(e) => setSecrets(prev => ({ ...prev, whatsapp_verify_token: e.target.value }))}
+                      className="pl-10"
+                      placeholder="Enter WhatsApp Verify Token"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="whatsapp_access_token">WhatsApp Access Token</Label>
+                  <div className="relative mt-1">
+                    <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="whatsapp_access_token"
+                      type="password"
+                      value={secrets.whatsapp_access_token}
+                      onChange={(e) => setSecrets(prev => ({ ...prev, whatsapp_access_token: e.target.value }))}
+                      className="pl-10"
+                      placeholder="Enter WhatsApp Access Token"
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
