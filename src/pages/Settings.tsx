@@ -2,20 +2,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent
-} from "@/components/ui/card";
-import { Camera, User, Mail, Lock, Phone, ArrowLeft, Key } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Database } from "@/integrations/supabase/types";
+import { AISettingsHeader } from "@/components/ai-settings/AISettingsHeader";
+import { AISettingsActions } from "@/components/ai-settings/AISettingsActions";
+import { ProfileSection } from "@/components/settings/ProfileSection";
+import { SecuritySection } from "@/components/settings/SecuritySection";
+import { PlatformsSection } from "@/components/settings/PlatformsSection";
+import { SecretsSection } from "@/components/settings/SecretsSection";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type PlatformSecrets = Database['public']['Tables']['platform_secrets']['Row'];
@@ -251,223 +245,36 @@ const Settings = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-8">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(-1)}
-            className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
-          </Button>
-          <h1 className="text-3xl font-bold">Settings</h1>
-        </div>
-
+        <AISettingsHeader />
+        
         <div className="space-y-6">
-          {/* Profile Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Shop Profile</CardTitle>
-              <CardDescription>
-                Manage your shop profile information
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Profile Picture */}
-              <div>
-                <Label>Shop Profile Picture</Label>
-                <div className="mt-2 flex items-center space-x-4">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src={profileUrl} />
-                    <AvatarFallback>
-                      {username.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <Label
-                      htmlFor="picture"
-                      className="inline-flex items-center px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-md cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Upload New Picture
-                    </Label>
-                    <Input
-                      id="picture"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                      disabled={loading}
-                    />
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      JPG, GIF or PNG. Max size of 2MB.
-                    </p>
-                  </div>
-                </div>
-              </div>
+          <ProfileSection
+            username={username}
+            email={email}
+            profileUrl={profileUrl}
+            loading={loading}
+            onUsernameChange={setUsername}
+            onFileUpload={handleFileUpload}
+          />
 
-              {/* Username */}
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="pl-10"
-                    placeholder="Enter username"
-                  />
-                </div>
-              </div>
+          <SecuritySection
+            onUpdatePassword={handleUpdatePassword}
+          />
 
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    placeholder="Enter email"
-                    disabled
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <PlatformsSection
+            whatsappNumber={whatsappNumber}
+            onWhatsappNumberChange={setWhatsappNumber}
+          />
 
-          {/* Security Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Security</CardTitle>
-              <CardDescription>
-                Manage your password and security settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">Password</div>
-                  <div className="text-sm text-slate-500">
-                    Update your password to keep your account secure
-                  </div>
-                </div>
-                <Button
-                  onClick={handleUpdatePassword}
-                  variant="outline"
-                  className="flex items-center"
-                >
-                  <Lock className="h-4 w-4 mr-2" />
-                  Change Password
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <SecretsSection
+            secrets={secrets}
+            onSecretsChange={setSecrets}
+          />
 
-          {/* Platforms Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Connected Platforms</CardTitle>
-              <CardDescription>
-                Manage your connected messaging platforms
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="whatsapp">WhatsApp Number</Label>
-                  <div className="relative mt-1">
-                    <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="whatsapp"
-                      type="tel"
-                      value={whatsappNumber}
-                      onChange={(e) => setWhatsappNumber(e.target.value)}
-                      className="pl-10"
-                      placeholder="Enter WhatsApp number"
-                    />
-                  </div>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Include country code (e.g., +1234567890)
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Secrets Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Platform Secrets</CardTitle>
-              <CardDescription>
-                Manage your WhatsApp integration secrets
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="whatsapp_phone_id">WhatsApp Phone ID</Label>
-                  <div className="relative mt-1">
-                    <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="whatsapp_phone_id"
-                      type="password"
-                      value={secrets.whatsapp_phone_id}
-                      onChange={(e) => setSecrets(prev => ({ ...prev, whatsapp_phone_id: e.target.value }))}
-                      className="pl-10"
-                      placeholder="Enter WhatsApp Phone ID"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="whatsapp_verify_token">WhatsApp Verify Token</Label>
-                  <div className="relative mt-1">
-                    <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="whatsapp_verify_token"
-                      type="password"
-                      value={secrets.whatsapp_verify_token}
-                      onChange={(e) => setSecrets(prev => ({ ...prev, whatsapp_verify_token: e.target.value }))}
-                      className="pl-10"
-                      placeholder="Enter WhatsApp Verify Token"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="whatsapp_access_token">WhatsApp Access Token</Label>
-                  <div className="relative mt-1">
-                    <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="whatsapp_access_token"
-                      type="password"
-                      value={secrets.whatsapp_access_token}
-                      onChange={(e) => setSecrets(prev => ({ ...prev, whatsapp_access_token: e.target.value }))}
-                      className="pl-10"
-                      placeholder="Enter WhatsApp Access Token"
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Save Button */}
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSave}
-              disabled={loading}
-              size="lg"
-            >
-              {loading ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
+          <AISettingsActions
+            onSave={handleSave}
+            isLoading={loading}
+          />
         </div>
       </div>
     </div>
