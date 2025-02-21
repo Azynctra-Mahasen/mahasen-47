@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,23 +59,27 @@ const Settings = () => {
           setProfileUrl(profileData.profile_url ?? "");
         }
 
-        // Get user's platform secrets
+        // Get user's secrets from vault
         const { data: secretsData, error: secretsError } = await supabase
-          .from('platform_secrets')
-          .select('whatsapp_phone_id, whatsapp_verify_token, whatsapp_access_token')
-          .eq('user_id', session.user.id)
-          .single();
+          .from('decrypted_user_secrets')
+          .select('secret_type, secret_value')
+          .eq('user_id', session.user.id);
 
-        if (secretsError && secretsError.code !== 'PGRST116') { // Not found error
+        if (secretsError) {
           console.error('Error fetching secrets:', secretsError);
           throw secretsError;
         }
 
         if (secretsData) {
+          const secretsMap = secretsData.reduce((acc, curr) => {
+            acc[curr.secret_type] = curr.secret_value;
+            return acc;
+          }, {} as Record<string, string>);
+
           setSecrets({
-            whatsapp_phone_id: secretsData.whatsapp_phone_id ?? "",
-            whatsapp_verify_token: secretsData.whatsapp_verify_token ?? "",
-            whatsapp_access_token: secretsData.whatsapp_access_token ?? ""
+            whatsapp_phone_id: secretsMap.whatsapp_phone_id ?? "",
+            whatsapp_verify_token: secretsMap.whatsapp_verify_token ?? "",
+            whatsapp_access_token: secretsMap.whatsapp_access_token ?? ""
           });
         }
       } catch (error) {
@@ -211,24 +214,37 @@ const Settings = () => {
         throw profileError;
       }
 
-      // Update or insert platform secrets
-      const { error: secretsError } = await supabase
-        .from('platform_secrets')
-        .upsert({
-          user_id: session.user.id,
-          whatsapp_phone_id: secrets.whatsapp_phone_id,
-          whatsapp_verify_token: secrets.whatsapp_verify_token,
-          whatsapp_access_token: secrets.whatsapp_access_token,
-          updated_at: new Date().toISOString()
+      // Store each secret in the vault
+      const { data: phoneIdData, error: phoneIdError } = await supabase
+        .rpc('store_user_secret', {
+          p_user_id: session.user.id,
+          p_secret_type: 'whatsapp_phone_id',
+          p_secret_value: secrets.whatsapp_phone_id
         });
 
-      if (secretsError) {
-        throw secretsError;
-      }
+      if (phoneIdError) throw phoneIdError;
+
+      const { data: verifyTokenData, error: verifyTokenError } = await supabase
+        .rpc('store_user_secret', {
+          p_user_id: session.user.id,
+          p_secret_type: 'whatsapp_verify_token',
+          p_secret_value: secrets.whatsapp_verify_token
+        });
+
+      if (verifyTokenError) throw verifyTokenError;
+
+      const { data: accessTokenData, error: accessTokenError } = await supabase
+        .rpc('store_user_secret', {
+          p_user_id: session.user.id,
+          p_secret_type: 'whatsapp_access_token',
+          p_secret_value: secrets.whatsapp_access_token
+        });
+
+      if (accessTokenError) throw accessTokenError;
 
       toast({
         title: "Success",
-        description: "Settings saved successfully",
+        description: "Settings and secrets saved successfully",
       });
     } catch (error) {
       console.error('Error saving settings:', error);
