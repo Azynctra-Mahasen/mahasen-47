@@ -369,6 +369,36 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_secrets: {
+        Row: {
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          whatsapp_access_token: string | null
+          whatsapp_phone_id: string | null
+          whatsapp_verify_token: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          whatsapp_access_token?: string | null
+          whatsapp_phone_id?: string | null
+          whatsapp_verify_token?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          whatsapp_access_token?: string | null
+          whatsapp_phone_id?: string | null
+          whatsapp_verify_token?: string | null
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           created_at: string | null

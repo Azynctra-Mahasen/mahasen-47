@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +18,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Database } from "@/integrations/supabase/types";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
+type PlatformSecrets = Database['public']['Tables']['platform_secrets']['Row'];
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -26,7 +28,11 @@ const Settings = () => {
   const [email, setEmail] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [profileUrl, setProfileUrl] = useState("");
-  const [secrets, setSecrets] = useState({
+  const [secrets, setSecrets] = useState<{
+    whatsapp_phone_id: string;
+    whatsapp_verify_token: string;
+    whatsapp_access_token: string;
+  }>({
     whatsapp_phone_id: "",
     whatsapp_verify_token: "",
     whatsapp_access_token: ""
@@ -42,22 +48,22 @@ const Settings = () => {
         }
 
         // Get the user's profile
-        const { data, error } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('username, profile_url, whatsapp_number')
           .eq('id', session.user.id)
           .single();
 
-        if (error) {
-          console.error('Error fetching profile:', error);
-          throw error;
+        if (profileError) {
+          console.error('Error fetching profile:', profileError);
+          throw profileError;
         }
 
-        if (data) {
-          setUsername(data.username ?? "");
+        if (profileData) {
+          setUsername(profileData.username ?? "");
           setEmail(session.user.email ?? "");
-          setWhatsappNumber(data.whatsapp_number ?? "");
-          setProfileUrl(data.profile_url ?? "");
+          setWhatsappNumber(profileData.whatsapp_number ?? "");
+          setProfileUrl(profileData.profile_url ?? "");
         }
 
         // Get user's platform secrets
@@ -73,7 +79,11 @@ const Settings = () => {
         }
 
         if (secretsData) {
-          setSecrets(secretsData);
+          setSecrets({
+            whatsapp_phone_id: secretsData.whatsapp_phone_id ?? "",
+            whatsapp_verify_token: secretsData.whatsapp_verify_token ?? "",
+            whatsapp_access_token: secretsData.whatsapp_access_token ?? ""
+          });
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -212,10 +222,10 @@ const Settings = () => {
         .from('platform_secrets')
         .upsert({
           user_id: session.user.id,
-          ...secrets,
+          whatsapp_phone_id: secrets.whatsapp_phone_id,
+          whatsapp_verify_token: secrets.whatsapp_verify_token,
+          whatsapp_access_token: secrets.whatsapp_access_token,
           updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
         });
 
       if (secretsError) {
