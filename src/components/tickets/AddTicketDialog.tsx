@@ -60,7 +60,12 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
         created_at: new Date().toISOString()
       };
 
-      // Create the ticket first
+      // If there's a WhatsApp message ID, include it in the ticket data
+      if (values.whatsapp_message_id) {
+        ticketData['whatsapp_message_id'] = values.whatsapp_message_id;
+      }
+
+      // Create the ticket
       const { data: ticket, error: ticketError } = await supabase
         .from("tickets")
         .insert(ticketData)
@@ -69,7 +74,7 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
 
       if (ticketError) throw ticketError;
 
-      // If there's a WhatsApp message ID to link, create the ticket_messages association
+      // If there's a WhatsApp message ID, create the ticket_messages association
       if (values.whatsapp_message_id) {
         const { error: messageError } = await supabase
           .from("ticket_messages")
