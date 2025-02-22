@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { processWhatsAppMessage, findReceiverProfile } from './message-processor.ts';
@@ -12,77 +11,41 @@ const corsHeaders = {
 const processedMessages = new Set();
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // Handle webhook verification
-  if (req.method === 'GET') {
-    try {
-      const url = new URL(req.url);
-      const mode = url.searchParams.get('hub.mode');
-      const token = url.searchParams.get('hub.verify_token');
-      const challenge = url.searchParams.get('hub.challenge');
-      
-      // Get all users' WhatsApp verify tokens
-      const { data: secretsData, error: secretsError } = await supabase
-        .from('decrypted_user_secrets')
-        .select('secret_value')
-        .eq('secret_type', 'whatsapp_verify_token');
-
-      if (secretsError) {
-        console.error('Error fetching verify tokens:', secretsError);
-        throw secretsError;
-      }
-
-      // Check if the provided token matches any user's verify token
-      const isValidToken = secretsData.some(secret => secret.secret_value === token);
-
-      if (mode === 'subscribe' && isValidToken) {
-        console.log('Webhook verified successfully');
-        return new Response(challenge, { 
-          headers: { ...corsHeaders, 'Content-Type': 'text/plain' } 
-        });
-      }
-
-      return new Response('Verification failed', { 
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'text/plain' } 
-      });
-    } catch (error) {
-      console.error('Error in webhook verification:', error);
-      return new Response('Internal server error', { 
-        status: 500,
-        headers: corsHeaders 
-      });
-    }
-  }
-
-  if (req.method === 'POST') {
-    try {
+    if (req.method === 'POST') {
       const payload = await req.json();
       console.log('WhatsApp API payload:', JSON.stringify(payload, null, 2));
 
-      const changes = payload.entry[0].changes[0].value;
-      
-      if (!changes.messages || changes.messages.length === 0) {
-        return new Response('No messages in webhook', { 
-          status: 200,
-          headers: corsHeaders 
+      if (!payload.entry?.[0]?.changes?.[0]?.value) {
+        return new Response('Invalid webhook payload', { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
-      // Extract receiver's phone number from metadata
-      const displayPhoneNumber = changes.metadata.display_phone_number;
+      const value = payload.entry[0].changes[0].value;
+      const displayPhoneNumber = value.metadata?.display_phone_number;
       
-      // Find the receiver's profile
+      if (!displayPhoneNumber) {
+        console.error('No display phone number in webhook payload');
+        return new Response(JSON.stringify({ error: 'No display phone number found' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Find the receiver's profile (AI account)
+      let receiverProfile;
       try {
-        const receiverProfile = await findReceiverProfile(supabase, displayPhoneNumber);
+        receiverProfile = await findReceiverProfile(supabase, displayPhoneNumber);
         console.log('Found receiver profile:', receiverProfile);
       } catch (error) {
         console.error('Error finding receiver:', error);
@@ -92,10 +55,21 @@ serve(async (req) => {
         });
       }
 
-      const messageId = changes.messages[0].id;
-      const userMessage = changes.messages[0].text.body;
-      const userId = changes.contacts[0].wa_id;
-      const userName = changes.contacts[0].profile.name;
+      if (!value.messages || value.messages.length === 0) {
+        return new Response('No messages in webhook', { 
+          status: 200,
+          headers: corsHeaders 
+        });
+      }
+
+      const message = value.messages[0];
+      const contact = value.contacts?.[0];
+
+      // Process the message
+      const messageId = message.id;
+      const userMessage = message.text.body;
+      const userId = contact.wa_id;
+      const userName = contact.profile.name;
 
       // Check if we've already processed this message
       if (processedMessages.has(messageId)) {
@@ -114,57 +88,77 @@ serve(async (req) => {
         idsToRemove.forEach(id => processedMessages.delete(id));
       }
 
-      console.log(`Received message from ${userName} (${userId}): ${userMessage}`);
+      console.log(`Processing message from ${userName} (${userId}) to ${displayPhoneNumber}`);
 
       // Get receiver's WhatsApp secrets
-      const { data: secrets, error: secretsError } = await supabase
+      const { data: receiverSecrets, error: secretsError } = await supabase
         .from('decrypted_user_secrets')
         .select('secret_type, secret_value')
-        .eq('user_id', receiverProfile.id)
-        .in('secret_type', ['whatsapp_phone_id', 'whatsapp_access_token']);
+        .eq('user_id', receiverProfile.id);
 
       if (secretsError) {
         console.error('Error fetching WhatsApp secrets:', secretsError);
         throw secretsError;
       }
 
-      if (!secrets || secrets.length === 0) {
-        console.error('No WhatsApp secrets found for user:', receiverProfile.id);
-        return new Response(JSON.stringify({ error: 'WhatsApp configuration not found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      const secretsMap = secrets.reduce((acc, curr) => {
-        acc[curr.secret_type] = curr.secret_value;
-        return acc;
-      }, {} as Record<string, string>);
-
-      // Process the message with user-specific secrets
+      // Process the message with receiver's credentials
       await processWhatsAppMessage(
         messageId,
         userMessage,
         userId,
         userName,
-        secretsMap.whatsapp_phone_id,
-        secretsMap.whatsapp_access_token
+        receiverProfile.id,
+        displayPhoneNumber
       );
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
-    } catch (error) {
-      console.error('Error processing webhook:', error);
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+
+    }
+
+    // Handle GET request for webhook verification
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      const mode = url.searchParams.get('hub.mode');
+      const token = url.searchParams.get('hub.verify_token');
+      const challenge = url.searchParams.get('hub.challenge');
+
+      if (mode === 'subscribe' && token) {
+        // Get all users' WhatsApp verify tokens
+        const { data: secretsData, error: secretsError } = await supabase
+          .from('decrypted_user_secrets')
+          .select('secret_value')
+          .eq('secret_type', 'whatsapp_verify_token');
+
+        if (secretsError) throw secretsError;
+
+        // Check if the token matches any user's verify token
+        const isValidToken = secretsData?.some(secret => secret.secret_value === token);
+
+        if (isValidToken) {
+          return new Response(challenge, {
+            headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+          });
+        }
+      }
+
+      return new Response('Verification failed', {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
       });
     }
-  }
 
-  return new Response('Method not allowed', { 
-    status: 405,
-    headers: corsHeaders 
-  });
+    return new Response('Method not allowed', {
+      status: 405,
+      headers: corsHeaders
+    });
+
+  } catch (error) {
+    console.error('Error in webhook handler:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 });
