@@ -200,10 +200,17 @@ const Settings = () => {
         throw new Error("No active session");
       }
 
-      // Validate WhatsApp number format
-      if (whatsappNumber && !/^\+?[1-9]\d{1,14}$/.test(whatsappNumber)) {
-        throw new Error("Invalid WhatsApp number format. Please include country code (e.g., +1234567890)");
+      // Validate WhatsApp number format (must start with + and have 10-15 digits)
+      if (whatsappNumber && !/^\+[1-9]\d{9,14}$/.test(whatsappNumber)) {
+        throw new Error("Invalid WhatsApp number format. Must start with + followed by country code (e.g., +1234567890)");
       }
+
+      // Validate required fields
+      if (!secrets.whatsapp_phone_id || !secrets.whatsapp_verify_token || !secrets.whatsapp_access_token) {
+        throw new Error("All WhatsApp platform secrets are required");
+      }
+
+      console.log('Saving profile with WhatsApp number:', whatsappNumber);
 
       // Update profile with WhatsApp number
       const { error: profileError } = await supabase
@@ -216,7 +223,8 @@ const Settings = () => {
         .eq('id', session.user.id);
 
       if (profileError) {
-        throw profileError;
+        console.error('Profile update error:', profileError);
+        throw new Error(`Failed to update profile: ${profileError.message}`);
       }
 
       // Store each secret individually
@@ -236,6 +244,7 @@ const Settings = () => {
       ];
 
       for (const secret of secretsToStore) {
+        console.log(`Storing secret: ${secret.type}`);
         const { error: secretError } = await supabase
           .rpc('store_user_secret', {
             p_user_id: session.user.id,
@@ -245,7 +254,7 @@ const Settings = () => {
 
         if (secretError) {
           console.error(`Error storing ${secret.type}:`, secretError);
-          throw secretError;
+          throw new Error(`Failed to store ${secret.type}: ${secretError.message}`);
         }
       }
 
