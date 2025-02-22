@@ -1,8 +1,6 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { processWhatsAppMessage } from './message-processor.ts';
+import { createClient } from '@supabase/supabase-js';
+import { processWhatsAppMessage, findReceiverProfile } from './message-processor.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,7 +28,7 @@ serve(async (req) => {
       const token = url.searchParams.get('hub.verify_token');
       const challenge = url.searchParams.get('hub.challenge');
       
-      // Get all users' WhatsApp verify tokens to handle multiple configurations
+      // Get all users' WhatsApp verify tokens
       const { data: secretsData, error: secretsError } = await supabase
         .from('decrypted_user_secrets')
         .select('secret_value')
@@ -66,10 +64,10 @@ serve(async (req) => {
 
   if (req.method === 'POST') {
     try {
-      const message = await req.json();
-      console.log('WhatsApp API payload:', JSON.stringify(message, null, 2));
+      const payload = await req.json();
+      console.log('WhatsApp API payload:', JSON.stringify(payload, null, 2));
 
-      const changes = message.entry[0].changes[0].value;
+      const changes = payload.entry[0].changes[0].value;
       
       if (!changes.messages || changes.messages.length === 0) {
         return new Response('No messages in webhook', { 
@@ -78,11 +76,26 @@ serve(async (req) => {
         });
       }
 
+      // Extract receiver's phone number from metadata
+      const displayPhoneNumber = changes.metadata.display_phone_number;
+      
+      // Find the receiver's profile
+      try {
+        const receiverProfile = await findReceiverProfile(supabase, displayPhoneNumber);
+        console.log('Found receiver profile:', receiverProfile);
+      } catch (error) {
+        console.error('Error finding receiver:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       const messageId = changes.messages[0].id;
       const userMessage = changes.messages[0].text.body;
       const userId = changes.contacts[0].wa_id;
       const userName = changes.contacts[0].profile.name;
-      
+
       // Check if we've already processed this message
       if (processedMessages.has(messageId)) {
         console.log(`Message ${messageId} already processed, skipping`);
@@ -102,32 +115,11 @@ serve(async (req) => {
 
       console.log(`Received message from ${userName} (${userId}): ${userMessage}`);
 
-      // First, find the user who owns this WhatsApp number
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('whatsapp_number', userId);
-
-      if (profileError) {
-        console.error('Error finding user profile:', profileError);
-        throw profileError;
-      }
-
-      if (!profiles || profiles.length === 0) {
-        console.error('No user found for WhatsApp number:', userId);
-        return new Response(JSON.stringify({ error: 'No matching user found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      const userProfileId = profiles[0].id;
-
-      // Get user's WhatsApp secrets
+      // Get receiver's WhatsApp secrets
       const { data: secrets, error: secretsError } = await supabase
         .from('decrypted_user_secrets')
         .select('secret_type, secret_value')
-        .eq('user_id', userProfileId)
+        .eq('user_id', receiverProfile.id)
         .in('secret_type', ['whatsapp_phone_id', 'whatsapp_access_token']);
 
       if (secretsError) {
@@ -136,7 +128,7 @@ serve(async (req) => {
       }
 
       if (!secrets || secrets.length === 0) {
-        console.error('No WhatsApp secrets found for user:', userProfileId);
+        console.error('No WhatsApp secrets found for user:', receiverProfile.id);
         return new Response(JSON.stringify({ error: 'WhatsApp configuration not found' }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -147,20 +139,6 @@ serve(async (req) => {
         acc[curr.secret_type] = curr.secret_value;
         return acc;
       }, {} as Record<string, string>);
-
-      // Verify we have all required secrets
-      if (!secretsMap.whatsapp_phone_id || !secretsMap.whatsapp_access_token) {
-        console.error('Missing required WhatsApp secrets');
-        return new Response(JSON.stringify({ error: 'Incomplete WhatsApp configuration' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      console.log('Retrieved WhatsApp configuration:', {
-        phoneId: secretsMap.whatsapp_phone_id,
-        hasAccessToken: !!secretsMap.whatsapp_access_token
-      });
 
       // Process the message with user-specific secrets
       await processWhatsAppMessage(
