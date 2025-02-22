@@ -200,7 +200,12 @@ const Settings = () => {
         throw new Error("No active session");
       }
 
-      // Update profile
+      // Validate WhatsApp number format
+      if (whatsappNumber && !/^\+?[1-9]\d{1,14}$/.test(whatsappNumber)) {
+        throw new Error("Invalid WhatsApp number format. Please include country code (e.g., +1234567890)");
+      }
+
+      // Update profile with WhatsApp number
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
@@ -214,33 +219,35 @@ const Settings = () => {
         throw profileError;
       }
 
-      // Store each secret in encrypted storage
-      const { data: phoneIdData, error: phoneIdError } = await supabase
-        .rpc('store_user_secret', {
-          p_user_id: session.user.id,
-          p_secret_type: 'whatsapp_phone_id',
-          p_secret_value: secrets.whatsapp_phone_id
-        });
+      // Store each secret individually
+      const secretsToStore = [
+        {
+          type: 'whatsapp_phone_id',
+          value: secrets.whatsapp_phone_id.trim()
+        },
+        {
+          type: 'whatsapp_verify_token',
+          value: secrets.whatsapp_verify_token.trim()
+        },
+        {
+          type: 'whatsapp_access_token',
+          value: secrets.whatsapp_access_token.trim()
+        }
+      ];
 
-      if (phoneIdError) throw phoneIdError;
+      for (const secret of secretsToStore) {
+        const { error: secretError } = await supabase
+          .rpc('store_user_secret', {
+            p_user_id: session.user.id,
+            p_secret_type: secret.type,
+            p_secret_value: secret.value
+          });
 
-      const { data: verifyTokenData, error: verifyTokenError } = await supabase
-        .rpc('store_user_secret', {
-          p_user_id: session.user.id,
-          p_secret_type: 'whatsapp_verify_token',
-          p_secret_value: secrets.whatsapp_verify_token
-        });
-
-      if (verifyTokenError) throw verifyTokenError;
-
-      const { data: accessTokenData, error: accessTokenError } = await supabase
-        .rpc('store_user_secret', {
-          p_user_id: session.user.id,
-          p_secret_type: 'whatsapp_access_token',
-          p_secret_value: secrets.whatsapp_access_token
-        });
-
-      if (accessTokenError) throw accessTokenError;
+        if (secretError) {
+          console.error(`Error storing ${secret.type}:`, secretError);
+          throw secretError;
+        }
+      }
 
       toast({
         title: "Success",
@@ -251,7 +258,7 @@ const Settings = () => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to save settings",
+        description: error instanceof Error ? error.message : "Failed to save settings",
       });
     } finally {
       setLoading(false);
