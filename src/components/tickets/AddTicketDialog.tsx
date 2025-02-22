@@ -44,22 +44,24 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
   const onSubmit = async (values: TicketFormValues) => {
     setIsSubmitting(true);
     try {
+      // Create base ticket data
       const ticketData = {
         title: values.title,
         customer_name: values.customer_name,
         platform: values.platform,
         type: values.type,
-        status: values.status,
+        status: values.status as "New" | "In Progress" | "Escalated" | "Completed",
         body: values.body,
         priority: values.priority,
         assigned_to: values.assigned_to,
         intent_type: "HUMAN_AGENT_REQUEST",
         escalation_reason: "Customer explicitly requested human agent",
-        last_updated_at: new Date().toISOString()
+        last_updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
       };
 
       // Create the ticket first
-      const { data: ticketData2, error: ticketError } = await supabase
+      const { data: ticket, error: ticketError } = await supabase
         .from("tickets")
         .insert(ticketData)
         .select()
@@ -67,18 +69,18 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
 
       if (ticketError) throw ticketError;
 
-      // If there's a message ID to link, create the ticket_messages association
+      // If there's a WhatsApp message ID to link, create the ticket_messages association
       if (values.whatsapp_message_id) {
         const { error: messageError } = await supabase
           .from("ticket_messages")
           .insert({
-            ticket_id: ticketData2.id,
-            message_id: values.whatsapp_message_id
+            ticket_id: ticket.id,
+            message_id: values.whatsapp_message_id,
+            created_at: new Date().toISOString()
           });
 
         if (messageError) {
           console.error("Error linking message to ticket:", messageError);
-          // Don't throw here, as the ticket was still created successfully
         }
       }
 
@@ -87,7 +89,7 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
         description: "Ticket created successfully",
       });
 
-      onTicketAdded(ticketData2);
+      onTicketAdded(ticket);
       form.reset();
       onOpenChange(false);
     } catch (error) {
