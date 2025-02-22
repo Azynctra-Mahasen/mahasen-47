@@ -159,7 +159,7 @@ export type Database = {
       }
       conversations: {
         Row: {
-          ai_enabled: boolean | null
+          ai_enabled: boolean
           contact_name: string
           contact_number: string
           created_at: string | null
@@ -170,7 +170,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
-          ai_enabled?: boolean | null
+          ai_enabled?: boolean
           contact_name: string
           contact_number: string
           created_at?: string | null
@@ -181,7 +181,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
-          ai_enabled?: boolean | null
+          ai_enabled?: boolean
           contact_name?: string
           contact_number?: string
           created_at?: string | null
@@ -366,6 +366,36 @@ export type Database = {
           platform?: string
           template?: Json
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      platform_secrets: {
+        Row: {
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          whatsapp_access_token: string | null
+          whatsapp_phone_id: string | null
+          whatsapp_verify_token: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          whatsapp_access_token?: string | null
+          whatsapp_phone_id?: string | null
+          whatsapp_verify_token?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          whatsapp_access_token?: string | null
+          whatsapp_phone_id?: string | null
+          whatsapp_verify_token?: string | null
         }
         Relationships: []
       }
@@ -754,6 +784,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_secrets: {
+        Row: {
+          created_at: string | null
+          encrypted_value: string
+          id: string
+          secret_type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_value: string
+          id?: string
+          secret_type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_value?: string
+          id?: string
+          secret_type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       webhook_errors: {
         Row: {
           created_at: string
@@ -783,6 +840,33 @@ export type Database = {
       }
     }
     Views: {
+      decrypted_user_secrets: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          secret_type: string | null
+          secret_value: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          secret_type?: string | null
+          secret_value?: never
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          secret_type?: string | null
+          secret_value?: never
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       error_summary: {
         Row: {
           component: string | null
@@ -827,6 +911,18 @@ export type Database = {
       }
     }
     Functions: {
+      decrypt_secret: {
+        Args: {
+          encrypted_secret: string
+        }
+        Returns: string
+      }
+      encrypt_secret: {
+        Args: {
+          secret: string
+        }
+        Returns: string
+      }
       match_knowledge_base: {
         Args: {
           query_text: string
@@ -860,6 +956,14 @@ export type Database = {
           source: string
           metadata: Json
         }[]
+      }
+      store_user_secret: {
+        Args: {
+          p_user_id: string
+          p_secret_type: string
+          p_secret_value: string
+        }
+        Returns: string
       }
     }
     Enums: {
