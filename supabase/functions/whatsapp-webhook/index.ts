@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { processWhatsAppMessage, findReceiverProfile } from './message-processor.ts';
+import { getAIResponse } from './ai-response.ts';
+import { handleTicketCreation } from './ticket-handler.ts';
+import { processIntent } from './services/intent-processor.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,19 +93,14 @@ serve(async (req) => {
 
       console.log(`Processing message from ${userName} (${userId}) to ${displayPhoneNumber}`);
 
-      // Get receiver's WhatsApp secrets
-      const { data: receiverSecrets, error: secretsError } = await supabase
-        .from('decrypted_user_secrets')
-        .select('secret_type, secret_value')
-        .eq('user_id', receiverProfile.id);
+      // Get AI settings
+      const { data: aiSettings } = await supabase
+        .from('ai_settings')
+        .select('*')
+        .single();
 
-      if (secretsError) {
-        console.error('Error fetching WhatsApp secrets:', secretsError);
-        throw secretsError;
-      }
-
-      // Process the message with receiver's credentials
-      await processWhatsAppMessage(
+      // Process the message and get conversation ID
+      const { conversationId } = await processWhatsAppMessage(
         messageId,
         userMessage,
         userId,
@@ -110,6 +108,53 @@ serve(async (req) => {
         receiverProfile.id,
         displayPhoneNumber
       );
+
+      // Process intent and create ticket if needed
+      const intentResult = await processIntent(userMessage, conversationId);
+      if (intentResult.shouldCreateTicket) {
+        await handleTicketCreation({
+          content: userMessage,
+          userName,
+          userId,
+          intentType: intentResult.intentType,
+          context: intentResult.context,
+          messageId,
+          conversationId,
+          supabase
+        });
+      }
+
+      // Get AI response
+      const aiResponse = await getAIResponse(userMessage, conversationId, aiSettings);
+
+      // Send the AI response back
+      const response = await fetch('https://graph.facebook.com/v17.0/527707247098559/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('WHATSAPP_ACCESS_TOKEN')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: userId,
+          text: { body: aiResponse }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to send WhatsApp message: ${response.statusText}`);
+      }
+
+      // Store AI response in database
+      await supabase
+        .from('messages')
+        .insert({
+          content: aiResponse,
+          conversation_id: conversationId,
+          sender_name: 'AI Assistant',
+          sender_number: displayPhoneNumber,
+          status: 'sent'
+        });
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
