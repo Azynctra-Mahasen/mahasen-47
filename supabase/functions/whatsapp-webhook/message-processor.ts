@@ -1,6 +1,5 @@
 
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { Database } from '../database.types';
+import { SupabaseClient, createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,7 +17,7 @@ export const processWhatsAppMessage = async (
   // Initialize Supabase client
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+  const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     // Store the message in the database
