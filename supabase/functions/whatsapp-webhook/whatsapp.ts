@@ -1,32 +1,10 @@
 
-export async function sendWhatsAppMessage(
-  to: string,
-  text: string,
-  accessToken: string,
-  phoneId: string
-) {
+export async function sendWhatsAppMessage(to: string, text: string, WHATSAPP_ACCESS_TOKEN: string, WHATSAPP_PHONE_ID: string) {
   try {
-    // Validate required parameters
-    if (!to || !text || !accessToken || !phoneId) {
-      throw new Error(`Missing required parameters: ${JSON.stringify({
-        hasTo: !!to,
-        hasText: !!text,
-        hasAccessToken: !!accessToken,
-        hasPhoneId: !!phoneId
-      })}`);
-    }
-
-    console.log('Sending WhatsApp message with:', {
-      to,
-      phoneId,
-      textLength: text.length,
-      hasAccessToken: !!accessToken
-    });
-    
-    const response = await fetch(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
+    const response = await fetch(`https://graph.facebook.com/v17.0/${WHATSAPP_PHONE_ID}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken.trim()}`,
+        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -42,17 +20,7 @@ export async function sendWhatsAppMessage(
     });
 
     const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('WhatsApp API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        data
-      });
-      throw new Error(`WhatsApp API error: ${data.error?.message || 'Unknown error'}`);
-    }
-
-    console.log('WhatsApp API success response:', JSON.stringify(data, null, 2));
+    console.log('WhatsApp API response:', JSON.stringify(data, null, 2));
     return data;
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);

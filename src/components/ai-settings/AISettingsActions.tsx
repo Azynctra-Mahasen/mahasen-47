@@ -13,9 +13,15 @@ export const AISettingsActions = ({ onSave, isLoading }: AISettingsActionsProps)
   return (
     <div className="flex justify-end space-x-4 pt-4">
       <Button
+        variant="outline"
+        onClick={() => navigate("/dashboard")}
+        disabled={isLoading}
+      >
+        Cancel
+      </Button>
+      <Button
         onClick={onSave}
         disabled={isLoading}
-        size="lg"
       >
         {isLoading ? "Saving..." : "Save Changes"}
       </Button>
