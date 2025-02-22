@@ -6,12 +6,27 @@ export async function sendWhatsAppMessage(
   phoneId: string
 ) {
   try {
-    console.log('Sending WhatsApp message with:', { to, phoneId, textLength: text.length });
+    // Validate required parameters
+    if (!to || !text || !accessToken || !phoneId) {
+      throw new Error(`Missing required parameters: ${JSON.stringify({
+        hasTo: !!to,
+        hasText: !!text,
+        hasAccessToken: !!accessToken,
+        hasPhoneId: !!phoneId
+      })}`);
+    }
+
+    console.log('Sending WhatsApp message with:', {
+      to,
+      phoneId,
+      textLength: text.length,
+      hasAccessToken: !!accessToken
+    });
     
     const response = await fetch(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${accessToken.trim()}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -27,7 +42,17 @@ export async function sendWhatsAppMessage(
     });
 
     const data = await response.json();
-    console.log('WhatsApp API response:', JSON.stringify(data, null, 2));
+    
+    if (!response.ok) {
+      console.error('WhatsApp API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data
+      });
+      throw new Error(`WhatsApp API error: ${data.error?.message || 'Unknown error'}`);
+    }
+
+    console.log('WhatsApp API success response:', JSON.stringify(data, null, 2));
     return data;
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);

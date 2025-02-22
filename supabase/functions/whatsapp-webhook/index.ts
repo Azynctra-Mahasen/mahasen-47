@@ -30,21 +30,21 @@ serve(async (req) => {
       const token = url.searchParams.get('hub.verify_token');
       const challenge = url.searchParams.get('hub.challenge');
       
-      // Get user's WhatsApp verify token from their secrets
+      // Get all users' WhatsApp verify tokens to handle multiple configurations
       const { data: secretsData, error: secretsError } = await supabase
         .from('decrypted_user_secrets')
         .select('secret_value')
-        .eq('secret_type', 'whatsapp_verify_token')
-        .single();
+        .eq('secret_type', 'whatsapp_verify_token');
 
       if (secretsError) {
-        console.error('Error fetching verify token:', secretsError);
+        console.error('Error fetching verify tokens:', secretsError);
         throw secretsError;
       }
 
-      const userVerifyToken = secretsData?.secret_value;
+      // Check if the provided token matches any user's verify token
+      const isValidToken = secretsData.some(secret => secret.secret_value === token);
 
-      if (mode === 'subscribe' && token === userVerifyToken) {
+      if (mode === 'subscribe' && isValidToken) {
         console.log('Webhook verified successfully');
         return new Response(challenge, { 
           headers: { ...corsHeaders, 'Content-Type': 'text/plain' } 
@@ -67,7 +67,7 @@ serve(async (req) => {
   if (req.method === 'POST') {
     try {
       const message = await req.json();
-      console.log('WhatsApp API payload:', JSON.stringify(message));
+      console.log('WhatsApp API payload:', JSON.stringify(message, null, 2));
 
       const changes = message.entry[0].changes[0].value;
       
@@ -102,10 +102,32 @@ serve(async (req) => {
 
       console.log(`Received message from ${userName} (${userId}): ${userMessage}`);
 
+      // First, find the user who owns this WhatsApp number
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('whatsapp_number', userId);
+
+      if (profileError) {
+        console.error('Error finding user profile:', profileError);
+        throw profileError;
+      }
+
+      if (!profiles || profiles.length === 0) {
+        console.error('No user found for WhatsApp number:', userId);
+        return new Response(JSON.stringify({ error: 'No matching user found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const userProfileId = profiles[0].id;
+
       // Get user's WhatsApp secrets
       const { data: secrets, error: secretsError } = await supabase
         .from('decrypted_user_secrets')
         .select('secret_type, secret_value')
+        .eq('user_id', userProfileId)
         .in('secret_type', ['whatsapp_phone_id', 'whatsapp_access_token']);
 
       if (secretsError) {
@@ -113,10 +135,32 @@ serve(async (req) => {
         throw secretsError;
       }
 
+      if (!secrets || secrets.length === 0) {
+        console.error('No WhatsApp secrets found for user:', userProfileId);
+        return new Response(JSON.stringify({ error: 'WhatsApp configuration not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       const secretsMap = secrets.reduce((acc, curr) => {
         acc[curr.secret_type] = curr.secret_value;
         return acc;
       }, {} as Record<string, string>);
+
+      // Verify we have all required secrets
+      if (!secretsMap.whatsapp_phone_id || !secretsMap.whatsapp_access_token) {
+        console.error('Missing required WhatsApp secrets');
+        return new Response(JSON.stringify({ error: 'Incomplete WhatsApp configuration' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log('Retrieved WhatsApp configuration:', {
+        phoneId: secretsMap.whatsapp_phone_id,
+        hasAccessToken: !!secretsMap.whatsapp_access_token
+      });
 
       // Process the message with user-specific secrets
       await processWhatsAppMessage(
