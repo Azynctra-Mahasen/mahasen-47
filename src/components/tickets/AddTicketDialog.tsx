@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,7 +34,7 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
       title: "",
       customer_name: "",
       platform: "whatsapp",
-      type: "REQUEST",
+      type: "ORDER",
       status: "New",
       body: "",
       priority: "HIGH",
@@ -54,22 +55,39 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
         assigned_to: values.assigned_to,
         intent_type: "HUMAN_AGENT_REQUEST",
         escalation_reason: "Customer explicitly requested human agent",
+        last_updated_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
+      // Create the ticket first
+      const { data: ticketData2, error: ticketError } = await supabase
         .from("tickets")
         .insert(ticketData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (ticketError) throw ticketError;
+
+      // If there's a message ID to link, create the ticket_messages association
+      if (values.whatsapp_message_id) {
+        const { error: messageError } = await supabase
+          .from("ticket_messages")
+          .insert({
+            ticket_id: ticketData2.id,
+            message_id: values.whatsapp_message_id
+          });
+
+        if (messageError) {
+          console.error("Error linking message to ticket:", messageError);
+          // Don't throw here, as the ticket was still created successfully
+        }
+      }
 
       toast({
         title: "Success",
         description: "Ticket created successfully",
       });
 
-      onTicketAdded(data);
+      onTicketAdded(ticketData2);
       form.reset();
       onOpenChange(false);
     } catch (error) {

@@ -844,6 +844,7 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string | null
+          secret: string | null
           secret_type: string | null
           secret_value: string | null
           updated_at: string | null
@@ -852,6 +853,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string | null
+          secret?: string | null
           secret_type?: string | null
           secret_value?: never
           updated_at?: string | null
@@ -860,6 +862,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string | null
+          secret?: string | null
           secret_type?: string | null
           secret_value?: never
           updated_at?: string | null
@@ -921,6 +924,10 @@ export type Database = {
         Args: {
           secret: string
         }
+        Returns: string
+      }
+      get_encryption_key: {
+        Args: Record<PropertyKey, never>
         Returns: string
       }
       match_knowledge_base: {
