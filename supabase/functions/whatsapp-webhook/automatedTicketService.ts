@@ -1,77 +1,153 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-interface TicketGenerationParams {
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+);
+
+interface IntentAnalysis {
+  intent: string;
+  confidence: number;
+  requires_escalation: boolean;
+  escalation_reason: string | null;
+  detected_entities: {
+    product_mentions: string[];
+    issue_type: string | null;
+    urgency_level: 'low' | 'medium' | 'high';
+    order_info?: {
+      product: string;
+      quantity: number;
+      state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING' | 'COMPLETED';
+      confirmed: boolean;
+    };
+  };
+}
+
+interface AutomatedTicketParams {
   messageId: string;
   conversationId: string;
-  analysis: any;
+  analysis: IntentAnalysis;
   customerName: string;
-  platform: string;
+  platform: 'whatsapp' | 'facebook' | 'instagram';
   messageContent: string;
-  context?: string;
+  context: string;
   whatsappMessageId?: string;
 }
 
 export class AutomatedTicketService {
-  static async generateTicket(params: TicketGenerationParams) {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    console.log('Generating ticket with params:', params);
-
-    try {
-      // Create the ticket
+  static async generateTicket(params: AutomatedTicketParams) {
+    console.log('Starting ticket generation with params:', params);
+    
+    const shouldCreateTicket = this.evaluateTicketCreationCriteria(params.analysis);
+    console.log('Ticket creation criteria met:', shouldCreateTicket);
+    
+    if (shouldCreateTicket) {
       const ticketData = {
-        title: `${params.analysis.intent || 'Support'} Request from ${params.customerName}`,
+        title: this.generateTicketTitle(params.analysis),
         customer_name: params.customerName,
         platform: params.platform,
-        type: params.analysis.intent || 'SUPPORT',
-        status: 'New',
+        type: params.analysis.detected_entities?.issue_type || "Order",
         body: params.messageContent,
-        priority: 'HIGH',
-        intent_type: params.analysis.intent,
-        context: params.context,
+        message_id: params.messageId,
         conversation_id: params.conversationId,
-        created_at: new Date().toISOString(),
-        last_updated_at: new Date().toISOString()
+        whatsapp_message_id: params.whatsappMessageId, // Store the original WhatsApp message ID
+        intent_type: this.determineTicketType(params.analysis),
+        context: params.context,
+        confidence_score: params.analysis.confidence,
+        escalation_reason: params.analysis.escalation_reason || undefined,
+        priority: this.determinePriority(params.analysis),
+        status: 'New'
       };
 
-      // Add whatsapp_message_id if it exists
-      if (params.whatsappMessageId) {
-        ticketData['whatsapp_message_id'] = params.whatsappMessageId;
-      }
+      console.log('Attempting to create ticket with data:', ticketData);
 
-      // Insert ticket
-      const { data: ticket, error: ticketError } = await supabase
+      const { data: ticket, error } = await supabase
         .from('tickets')
         .insert(ticketData)
         .select()
         .single();
 
-      if (ticketError) {
-        console.error('Error creating ticket:', ticketError);
-        throw ticketError;
+      if (error) {
+        console.error('Error creating ticket:', error);
+        throw error;
       }
 
-      // Create ticket_messages association
-      const { error: messageError } = await supabase
-        .from('ticket_messages')
-        .insert({
-          ticket_id: ticket.id,
-          message_id: params.messageId,
-          created_at: new Date().toISOString()
-        });
-
-      if (messageError) {
-        console.error('Error creating ticket message association:', messageError);
-        // Don't throw here as the ticket was still created successfully
-      }
-
+      console.log('Successfully created ticket:', ticket);
       return ticket;
-    } catch (error) {
-      console.error('Error in generateTicket:', error);
-      throw error;
     }
+    
+    return null;
+  }
+
+  private static evaluateTicketCreationCriteria(analysis: IntentAnalysis): boolean {
+    // Check for order placement with confirmation
+    if (analysis.intent === 'ORDER_PLACEMENT' && 
+        analysis.detected_entities.order_info?.state === 'PROCESSING' && 
+        analysis.detected_entities.order_info?.confirmed) {
+      return true;
+    }
+
+    // Keep existing criteria
+    return (
+      analysis.requires_escalation ||
+      analysis.intent === 'HUMAN_AGENT_REQUEST' ||
+      (analysis.intent === 'SUPPORT_REQUEST' && 
+       analysis.detected_entities?.urgency_level === 'high')
+    );
+  }
+
+  private static determinePriority(analysis: IntentAnalysis): 'LOW' | 'MEDIUM' | 'HIGH' {
+    // Orders always get HIGH priority
+    if (analysis.intent === 'ORDER_PLACEMENT' && 
+        analysis.detected_entities.order_info?.confirmed) {
+      return 'HIGH';
+    }
+    
+    if (analysis.intent === 'HUMAN_AGENT_REQUEST' || 
+        analysis.detected_entities?.urgency_level === 'high') {
+      return 'HIGH';
+    }
+    
+    if (analysis.detected_entities?.urgency_level === 'medium') {
+      return 'MEDIUM';
+    }
+    
+    return 'LOW';
+  }
+
+  private static determineTicketType(analysis: IntentAnalysis): string {
+    if (analysis.intent === 'ORDER_PLACEMENT' && 
+        analysis.detected_entities.order_info?.confirmed) {
+      return 'ORDER';
+    }
+
+    switch (analysis.intent) {
+      case 'ORDER_PLACEMENT':
+        return 'ORDER';
+      case 'HUMAN_AGENT_REQUEST':
+        return 'REQUEST';
+      default:
+        return 'SUPPORT';
+    }
+  }
+
+  private static generateTicketTitle(analysis: IntentAnalysis): string {
+    if (analysis.intent === 'ORDER_PLACEMENT' && 
+        analysis.detected_entities.order_info?.confirmed) {
+      const { product, quantity } = analysis.detected_entities.order_info;
+      return `Order: ${product} (Qty: ${quantity})`;
+    }
+
+    if (analysis.intent === 'HUMAN_AGENT_REQUEST') {
+      return 'Human Agent Request';
+    }
+
+    const issueType = analysis.detected_entities?.issue_type;
+    if (issueType) {
+      return `${issueType.charAt(0).toUpperCase() + issueType.slice(1)} Support Request`;
+    }
+
+    return 'Support Request';
   }
 }
