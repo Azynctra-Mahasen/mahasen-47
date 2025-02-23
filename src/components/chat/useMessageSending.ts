@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { WhatsAppMessage } from "@/types/chat";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,31 @@ export const useMessageSending = (
     
     setIsSending(true);
     try {
+      // Get user secrets first
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error("No active session");
+      }
+
+      // Get user's WhatsApp secrets
+      const { data: secretsData, error: secretsError } = await supabase
+        .from('decrypted_user_secrets')
+        .select('secret_type, secret_value')
+        .eq('user_id', session.user.id);
+
+      if (secretsError) throw secretsError;
+
+      if (!secretsData || secretsData.length === 0) {
+        throw new Error("WhatsApp configuration not found. Please configure your WhatsApp settings first.");
+      }
+
+      // Create secrets map
+      const secrets = secretsData.reduce((acc, curr) => {
+        acc[curr.secret_type] = curr.secret_value;
+        return acc;
+      }, {} as Record<string, string>);
+
       // Store message in database
       const { data: messageData, error: dbError } = await supabase
         .from("messages")
@@ -42,7 +67,9 @@ export const useMessageSending = (
         to: contactNumber,
         message: newMessage,
         type: "text",
-        useAI: false
+        useAI: false,
+        phoneId: secrets.whatsapp_phone_id,
+        accessToken: secrets.whatsapp_access_token
       };
 
       const { error: whatsappError } = await supabase.functions.invoke(

@@ -1,9 +1,12 @@
-export async function sendWhatsAppMessage(to: string, text: string, WHATSAPP_ACCESS_TOKEN: string, WHATSAPP_PHONE_ID: string) {
+
+export async function sendWhatsAppMessage(to: string, text: string, accessToken: string, phoneId: string) {
   try {
-    const response = await fetch(`https://graph.facebook.com/v17.0/${WHATSAPP_PHONE_ID}/messages`, {
+    console.log('Sending WhatsApp message with:', { to, phoneId, textLength: text.length });
+    
+    const response = await fetch(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
