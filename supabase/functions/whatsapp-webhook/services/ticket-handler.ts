@@ -8,50 +8,82 @@ interface TicketContext {
   userName: string;
   platform: 'whatsapp' | 'facebook' | 'instagram';
   messageContent: string;
-  knowledgeBase?: string;
+  knowledgeBaseContext?: string;
+}
+
+interface IntentAnalysis {
+  intent: string;
+  confidence: number;
+  requires_escalation?: boolean;
+  requires_to_escalation?: boolean; // Add support for both property names
+  escalation_reason: string | null;
+  detected_entities: {
+    product_mentions: string[];
+    issue_type: string | null;
+    urgency_level: 'low' | 'medium' | 'high';
+    order_info?: {
+      product: string;
+      quantity: number;
+      state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING' | 'COMPLETED';
+      confirmed: boolean;
+    };
+  };
+  response?: string;
 }
 
 export class TicketHandler {
   static async handleTicketCreation(
-    analysis: any,
+    analysis: IntentAnalysis,
     context: TicketContext
   ): Promise<string | null> {
     console.log('Handling ticket creation with analysis:', analysis);
 
+    // Normalize the escalation property
+    const requiresEscalation = analysis.requires_escalation ?? analysis.requires_to_escalation ?? false;
+
     // Handle order tickets
     if (analysis.intent === 'ORDER_PLACEMENT' &&
-        analysis.detected_entities.order_info?.state === 'PROCESSING' &&
-        analysis.detected_entities.order_info?.confirmed) {
-      return await this.createOrderTicket(analysis, context);
+        analysis.detected_entities?.order_info) {
+      const orderInfo = analysis.detected_entities.order_info;
+      
+      // If order is not confirmed yet, return the response to ask for confirmation
+      if (!orderInfo.confirmed) {
+        return analysis.response || 'Please confirm your order.';
+      }
+      
+      // If confirmed, create the ticket
+      if (orderInfo.state === 'PROCESSING' && orderInfo.confirmed) {
+        return await this.createOrderTicket(analysis, context);
+      }
     }
 
     // Handle support tickets
-    if (IntentProcessor.evaluateEscalationNeeds(analysis)) {
+    if (requiresEscalation || this.shouldEscalate(analysis)) {
       await this.createSupportTicket(analysis, context);
     }
 
     return null;
   }
 
-  private static async createOrderTicket(analysis: any, context: TicketContext): Promise<string> {
+  private static shouldEscalate(analysis: IntentAnalysis): boolean {
+    return analysis.intent === 'SUPPORT_REQUEST' && 
+           analysis.detected_entities.urgency_level === 'high';
+  }
+
+  private static async createOrderTicket(analysis: IntentAnalysis, context: TicketContext): Promise<string> {
     const orderInfo = analysis.detected_entities.order_info;
     console.log('Creating order ticket with info:', orderInfo);
     
     try {
-      // Generate a UUID for whatsapp_message_id if needed
-      const normalizedMessageId = context.messageId.startsWith('wamid.') 
-        ? crypto.randomUUID()  // Generate a new UUID for WhatsApp messages
-        : context.messageId;   // Use the existing ID for other platforms
-
       const ticket = await AutomatedTicketService.generateTicket({
-        messageId: normalizedMessageId,
+        messageId: context.messageId,
         conversationId: context.conversationId,
         analysis: analysis,
         customerName: context.userName,
         platform: context.platform,
         messageContent: `Order: ${orderInfo.product} x ${orderInfo.quantity}`,
         context: `Product: ${orderInfo.product}\nQuantity: ${orderInfo.quantity}`,
-        whatsappMessageId: context.messageId // Store the original WhatsApp message ID
+        whatsappMessageId: context.platform === 'whatsapp' ? context.messageId : undefined
       });
 
       if (ticket) {
@@ -65,22 +97,17 @@ export class TicketHandler {
     }
   }
 
-  private static async createSupportTicket(analysis: any, context: TicketContext): Promise<void> {
+  private static async createSupportTicket(analysis: IntentAnalysis, context: TicketContext): Promise<void> {
     try {
-      // Generate a UUID for whatsapp_message_id if needed
-      const normalizedMessageId = context.messageId.startsWith('wamid.') 
-        ? crypto.randomUUID()  // Generate a new UUID for WhatsApp messages
-        : context.messageId;   // Use the existing ID for other platforms
-
       await AutomatedTicketService.generateTicket({
-        messageId: normalizedMessageId,
+        messageId: context.messageId,
         conversationId: context.conversationId,
         analysis: analysis,
         customerName: context.userName,
         platform: context.platform,
         messageContent: context.messageContent,
-        context: context.knowledgeBase || '',
-        whatsappMessageId: context.messageId // Store the original WhatsApp message ID
+        context: context.knowledgeBaseContext || '',
+        whatsappMessageId: context.platform === 'whatsapp' ? context.messageId : undefined
       });
     } catch (error) {
       console.error('Error creating support ticket:', error);
