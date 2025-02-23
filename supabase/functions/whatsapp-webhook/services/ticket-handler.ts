@@ -15,7 +15,6 @@ interface IntentAnalysis {
   intent: string;
   confidence: number;
   requires_escalation?: boolean;
-  requires_to_escalation?: boolean; // Add support for both property names
   escalation_reason: string | null;
   detected_entities: {
     product_mentions: string[];
@@ -39,7 +38,7 @@ export class TicketHandler {
     console.log('Handling ticket creation with analysis:', analysis);
 
     // Normalize the escalation property
-    const requiresEscalation = analysis.requires_escalation ?? analysis.requires_to_escalation ?? false;
+    const requiresEscalation = analysis.requires_escalation ?? false;
 
     // Handle order tickets
     if (analysis.intent === 'ORDER_PLACEMENT' &&
