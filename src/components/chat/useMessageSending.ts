@@ -1,8 +1,12 @@
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 import type { WhatsAppMessage } from "@/types/chat";
 import { useToast } from "@/hooks/use-toast";
+import { 
+  saveMessageToDatabase, 
+  sendWhatsAppMessage, 
+  getWhatsAppSecrets 
+} from "@/utils/messageOperations";
 
 export const useMessageSending = (
   id: string | undefined,
@@ -18,48 +22,11 @@ export const useMessageSending = (
     
     setIsSending(true);
     try {
-      // Get user secrets first
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error("No active session");
-      }
+      // Get WhatsApp configuration
+      const secrets = await getWhatsAppSecrets();
 
-      // Get user's WhatsApp secrets
-      const { data: secretsData, error: secretsError } = await supabase
-        .from('decrypted_user_secrets')
-        .select('secret_type, secret_value')
-        .eq('user_id', session.user.id);
-
-      if (secretsError) throw secretsError;
-
-      if (!secretsData || secretsData.length === 0) {
-        throw new Error("WhatsApp configuration not found. Please configure your WhatsApp settings first.");
-      }
-
-      // Create secrets map
-      const secrets = secretsData.reduce((acc, curr) => {
-        acc[curr.secret_type] = curr.secret_value;
-        return acc;
-      }, {} as Record<string, string>);
-
-      // Store message in database
-      const { data: messageData, error: dbError } = await supabase
-        .from("messages")
-        .insert({
-          conversation_id: id,
-          content: newMessage,
-          status: "sent",
-          sender_name: "Agent",
-          sender_number: "system",
-          metadata: {
-            is_agent_message: true,
-            skip_intent_analysis: true
-          }
-        })
-        .select()
-        .single();
-
+      // Save message to database
+      const { error: dbError } = await saveMessageToDatabase(id, newMessage);
       if (dbError) throw dbError;
 
       // Send WhatsApp message
@@ -72,16 +39,10 @@ export const useMessageSending = (
         accessToken: secrets.whatsapp_access_token
       };
 
-      const { error: whatsappError } = await supabase.functions.invoke(
-        'send-whatsapp',
-        {
-          body: messagePayload,
-        }
-      );
-
+      const { error: whatsappError } = await sendWhatsAppMessage(messagePayload);
       if (whatsappError) throw whatsappError;
 
-      // Explicitly refetch messages to ensure UI is up to date
+      // Update UI
       refetchMessages();
       
       toast({
