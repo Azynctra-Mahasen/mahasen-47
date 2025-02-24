@@ -1,6 +1,6 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { MessageSquare, CircleDot } from "lucide-react";
+import { MessageSquare, Circle } from "lucide-react";
 import type { Platform } from "@/types/platform";
 
 interface ConversationCardProps {
@@ -30,7 +30,7 @@ export const ConversationCard = ({
         </CardTitle>
         <div className="flex items-center gap-2">
           {has_unread && (
-            <CircleDot className="h-4 w-4 text-green-500" />
+            <div className="h-3 w-3 rounded-full bg-green-500" />
           )}
           <div className="text-sm text-muted-foreground">
             {new Date(latest_message_time).toLocaleDateString()}
