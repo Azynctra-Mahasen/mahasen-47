@@ -62,9 +62,13 @@ export const ProfileSection = ({
           <Label>Shop Profile Picture</Label>
           <div className="mt-2 flex items-center space-x-4">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={profileUrl} />
+              <AvatarImage 
+                src={profileUrl} 
+                alt={username}
+                className="object-cover"
+              />
               <AvatarFallback>
-                {username.slice(0, 2).toUpperCase()}
+                {username?.slice(0, 2).toUpperCase() || 'SP'}
               </AvatarFallback>
             </Avatar>
             <div>
