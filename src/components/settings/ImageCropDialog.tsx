@@ -42,7 +42,78 @@ export const ImageCropDialog = ({ open, onOpenChange, imageUrl, onCropComplete }
     setImageRef(e.currentTarget);
   };
 
-  const getCroppedImg = () => {
+  const compressImage = (canvas: HTMLCanvasElement): Promise<Blob> => {
+    return new Promise((resolve) => {
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            console.error('Canvas to Blob conversion failed');
+            return;
+          }
+
+          // If the blob is already small enough, return it directly
+          if (blob.size <= 2 * 1024 * 1024) {
+            resolve(blob);
+            return;
+          }
+
+          // Create a new image from the blob
+          const img = new Image();
+          img.src = URL.createObjectURL(blob);
+          
+          img.onload = () => {
+            URL.revokeObjectURL(img.src);
+            const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
+            
+            let width = img.width;
+            let height = img.height;
+
+            // Calculate new dimensions while maintaining aspect ratio
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height = Math.round((height * MAX_WIDTH) / width);
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width = Math.round((width * MAX_HEIGHT) / height);
+                height = MAX_HEIGHT;
+              }
+            }
+
+            // Create a new canvas for the compressed image
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            if (!ctx) {
+              console.error('Failed to get canvas context');
+              resolve(blob);
+              return;
+            }
+
+            // Draw the image with the new dimensions
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Convert to blob with compression
+            canvas.toBlob(
+              (compressedBlob) => {
+                resolve(compressedBlob || blob);
+              },
+              'image/jpeg',
+              0.8 // Compression quality (0.8 = 80%)
+            );
+          };
+        },
+        'image/jpeg',
+        1.0
+      );
+    });
+  };
+
+  const getCroppedImg = async () => {
     if (!imageRef) return;
 
     const canvas = document.createElement('canvas');
@@ -74,12 +145,13 @@ export const ImageCropDialog = ({ open, onOpenChange, imageUrl, onCropComplete }
       pixelCrop.height
     );
 
-    canvas.toBlob((blob) => {
-      if (blob) {
-        onCropComplete(blob);
-        onOpenChange(false);
-      }
-    }, 'image/jpeg', 0.9);
+    try {
+      const compressedBlob = await compressImage(canvas);
+      onCropComplete(compressedBlob);
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error compressing image:', error);
+    }
   };
 
   return (
