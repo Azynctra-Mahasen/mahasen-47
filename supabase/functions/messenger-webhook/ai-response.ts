@@ -57,7 +57,7 @@ async function generateOllamaResponse(history: any[], aiSettings: any): Promise<
       model: 'llama3.2:latest',
       messages: history,
       options: {
-        temperature: 0.7,
+        temperature: 0.1,
         top_p: 0.9
       },
       system: `You are an AI assistant with a ${aiSettings.tone} tone. ${aiSettings.behaviour || ''}`
@@ -90,7 +90,7 @@ async function generateGeminiResponse(history: any[], aiSettings: any): Promise<
         }))
       ],
       generationConfig: {
-        temperature: 0.7,
+        temperature: 0.1,
         topP: 0.9,
         topK: 40
       }

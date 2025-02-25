@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,7 +34,7 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
       title: "",
       customer_name: "",
       platform: "whatsapp",
-      type: "REQUEST",
+      type: "ORDER",
       status: "New",
       body: "",
       priority: "HIGH",
@@ -43,33 +44,52 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
   const onSubmit = async (values: TicketFormValues) => {
     setIsSubmitting(true);
     try {
+      // Create base ticket data
       const ticketData = {
         title: values.title,
         customer_name: values.customer_name,
         platform: values.platform,
         type: values.type,
-        status: values.status,
+        status: values.status as "New" | "In Progress" | "Escalated" | "Completed",
         body: values.body,
         priority: values.priority,
         assigned_to: values.assigned_to,
         intent_type: "HUMAN_AGENT_REQUEST",
         escalation_reason: "Customer explicitly requested human agent",
+        last_updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
+      // Create the ticket first
+      const { data: ticket, error: ticketError } = await supabase
         .from("tickets")
         .insert(ticketData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (ticketError) throw ticketError;
+
+      // If there's a WhatsApp message ID to link, create the ticket_messages association
+      if (values.whatsapp_message_id) {
+        const { error: messageError } = await supabase
+          .from("ticket_messages")
+          .insert({
+            ticket_id: ticket.id,
+            message_id: values.whatsapp_message_id,
+            created_at: new Date().toISOString()
+          });
+
+        if (messageError) {
+          console.error("Error linking message to ticket:", messageError);
+        }
+      }
 
       toast({
         title: "Success",
         description: "Ticket created successfully",
       });
 
-      onTicketAdded(data);
+      onTicketAdded(ticket);
       form.reset();
       onOpenChange(false);
     } catch (error) {

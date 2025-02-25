@@ -52,6 +52,7 @@ export type Database = {
           model_name: Database["public"]["Enums"]["ai_model"]
           tone: Database["public"]["Enums"]["ai_tone"]
           updated_at: string
+          use_mcp: boolean | null
         }
         Insert: {
           behaviour?: string | null
@@ -62,6 +63,7 @@ export type Database = {
           model_name?: Database["public"]["Enums"]["ai_model"]
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
+          use_mcp?: boolean | null
         }
         Update: {
           behaviour?: string | null
@@ -72,34 +74,120 @@ export type Database = {
           model_name?: Database["public"]["Enums"]["ai_model"]
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
+          use_mcp?: boolean | null
         }
         Relationships: []
       }
+      context_tracking: {
+        Row: {
+          context_type: string
+          conversation_id: string | null
+          created_at: string | null
+          effectiveness_score: number | null
+          id: string
+          interaction_count: number | null
+          last_interaction: string | null
+          sentiment: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          context_type: string
+          conversation_id?: string | null
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          interaction_count?: number | null
+          last_interaction?: string | null
+          sentiment?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          context_type?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          interaction_count?: number | null
+          last_interaction?: string | null
+          sentiment?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "context_tracking_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_contexts: {
+        Row: {
+          context_data: Json
+          context_type: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          context_data: Json
+          context_type: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          context_data?: Json
+          context_type?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_contexts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
-          ai_enabled: boolean | null
+          ai_enabled: boolean
           contact_name: string
           contact_number: string
           created_at: string | null
           id: string
+          last_context_update: string | null
+          metadata: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at: string | null
         }
         Insert: {
-          ai_enabled?: boolean | null
+          ai_enabled?: boolean
           contact_name: string
           contact_number: string
           created_at?: string | null
           id?: string
+          last_context_update?: string | null
+          metadata?: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
         }
         Update: {
-          ai_enabled?: boolean | null
+          ai_enabled?: boolean
           contact_name?: string
           contact_number?: string
           created_at?: string | null
           id?: string
+          last_context_update?: string | null
+          metadata?: Json | null
           platform?: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
         }
@@ -107,38 +195,47 @@ export type Database = {
       }
       knowledge_base_files: {
         Row: {
+          category: string | null
           content: string | null
           content_type: string
           created_at: string
           embedding: string | null
+          embedding_status: string | null
           file_path: string
           filename: string
           fts: unknown | null
           id: string
+          metadata: Json | null
           size: number
           user_id: string
         }
         Insert: {
+          category?: string | null
           content?: string | null
           content_type: string
           created_at?: string
           embedding?: string | null
+          embedding_status?: string | null
           file_path: string
           filename: string
           fts?: unknown | null
           id?: string
+          metadata?: Json | null
           size: number
           user_id: string
         }
         Update: {
+          category?: string | null
           content?: string | null
           content_type?: string
           created_at?: string
           embedding?: string | null
+          embedding_status?: string | null
           file_path?: string
           filename?: string
           fts?: unknown | null
           id?: string
+          metadata?: Json | null
           size?: number
           user_id?: string
         }
@@ -150,6 +247,8 @@ export type Database = {
           conversation_id: string | null
           created_at: string | null
           id: string
+          metadata: Json | null
+          order_info: Json | null
           read: boolean | null
           sender_name: string
           sender_number: string
@@ -161,6 +260,8 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json | null
+          order_info?: Json | null
           read?: boolean | null
           sender_name: string
           sender_number: string
@@ -172,6 +273,8 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json | null
+          order_info?: Json | null
           read?: boolean | null
           sender_name?: string
           sender_number?: string
@@ -209,6 +312,267 @@ export type Database = {
           id?: number
           page_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      performance_metrics: {
+        Row: {
+          details: Json | null
+          endpoint_name: string
+          id: string
+          response_time: number
+          success: boolean
+          timestamp: string | null
+        }
+        Insert: {
+          details?: Json | null
+          endpoint_name: string
+          id?: string
+          response_time: number
+          success: boolean
+          timestamp?: string | null
+        }
+        Update: {
+          details?: Json | null
+          endpoint_name?: string
+          id?: string
+          response_time?: number
+          success?: boolean
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
+      platform_response_formats: {
+        Row: {
+          created_at: string | null
+          format_type: string
+          id: string
+          platform: string
+          template: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          format_type: string
+          id?: string
+          platform: string
+          template: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          format_type?: string
+          id?: string
+          platform?: string
+          template?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      platform_secrets: {
+        Row: {
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          whatsapp_access_token: string | null
+          whatsapp_phone_id: string | null
+          whatsapp_verify_token: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          whatsapp_access_token?: string | null
+          whatsapp_phone_id?: string | null
+          whatsapp_verify_token?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          whatsapp_access_token?: string | null
+          whatsapp_phone_id?: string | null
+          whatsapp_verify_token?: string | null
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          created_at: string | null
+          description: string
+          discounts: number | null
+          embedding: string | null
+          embedding_status: string | null
+          id: string
+          price: number
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description: string
+          discounts?: number | null
+          embedding?: string | null
+          embedding_status?: string | null
+          id?: string
+          price: number
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string
+          discounts?: number | null
+          embedding?: string | null
+          embedding_status?: string | null
+          id?: string
+          price?: number
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          profile_url: string | null
+          updated_at: string
+          username: string | null
+          whatsapp_number: string | null
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          profile_url?: string | null
+          updated_at?: string
+          username?: string | null
+          whatsapp_number?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_url?: string | null
+          updated_at?: string
+          username?: string | null
+          whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      prompt_templates: {
+        Row: {
+          created_at: string | null
+          effectiveness_score: number | null
+          id: string
+          intent_type: string
+          is_active: boolean | null
+          language: string | null
+          name: string
+          platform: string
+          template: string
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          intent_type: string
+          is_active?: boolean | null
+          language?: string | null
+          name: string
+          platform: string
+          template: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          effectiveness_score?: number | null
+          id?: string
+          intent_type?: string
+          is_active?: boolean | null
+          language?: string | null
+          name?: string
+          platform?: string
+          template?: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
+      sync_status: {
+        Row: {
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          last_sync_at: string | null
+          platform: string
+          retry_count: number | null
+          sync_status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          platform: string
+          retry_count?: number | null
+          sync_status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          platform?: string
+          retry_count?: number | null
+          sync_status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_logs: {
+        Row: {
+          component: string
+          error_code: string | null
+          id: string
+          log_level: string
+          message: string
+          metadata: Json | null
+          stack_trace: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          component: string
+          error_code?: string | null
+          id?: string
+          log_level: string
+          message: string
+          metadata?: Json | null
+          stack_trace?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          component?: string
+          error_code?: string | null
+          id?: string
+          log_level?: string
+          message?: string
+          metadata?: Json | null
+          stack_trace?: string | null
+          timestamp?: string | null
         }
         Relationships: []
       }
@@ -256,11 +620,48 @@ export type Database = {
           },
         ]
       }
+      ticket_messages: {
+        Row: {
+          created_at: string | null
+          id: number
+          message_id: string
+          ticket_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          message_id: string
+          ticket_id: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          message_id?: string
+          ticket_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
           assigned_to: string | null
           body: string
           confidence_score: number | null
+          confirmation_message_id: string | null
           context: string | null
           conversation_id: string | null
           created_at: string
@@ -269,17 +670,20 @@ export type Database = {
           id: number
           intent_type: string | null
           last_updated_at: string | null
-          message_id: string | null
+          order_status: string | null
           platform: Database["public"]["Enums"]["platform_type"]
           priority: string | null
+          product_info: Json | null
           status: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
+          whatsapp_message_id: string | null
         }
         Insert: {
           assigned_to?: string | null
           body: string
           confidence_score?: number | null
+          confirmation_message_id?: string | null
           context?: string | null
           conversation_id?: string | null
           created_at?: string
@@ -288,17 +692,20 @@ export type Database = {
           id?: number
           intent_type?: string | null
           last_updated_at?: string | null
-          message_id?: string | null
+          order_status?: string | null
           platform: Database["public"]["Enums"]["platform_type"]
           priority?: string | null
+          product_info?: Json | null
           status?: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
+          whatsapp_message_id?: string | null
         }
         Update: {
           assigned_to?: string | null
           body?: string
           confidence_score?: number | null
+          confirmation_message_id?: string | null
           context?: string | null
           conversation_id?: string | null
           created_at?: string
@@ -307,12 +714,14 @@ export type Database = {
           id?: number
           intent_type?: string | null
           last_updated_at?: string | null
-          message_id?: string | null
+          order_status?: string | null
           platform?: Database["public"]["Enums"]["platform_type"]
           priority?: string | null
+          product_info?: Json | null
           status?: Database["public"]["Enums"]["ticket_status"]
           title?: string
           type?: string
+          whatsapp_message_id?: string | null
         }
         Relationships: [
           {
@@ -322,14 +731,34 @@ export type Database = {
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "tickets_message_id_fkey"
-            columns: ["message_id"]
-            isOneToOne: false
-            referencedRelation: "messages"
-            referencedColumns: ["id"]
-          },
         ]
+      }
+      usage_stats: {
+        Row: {
+          action_type: string
+          details: Json | null
+          feature_name: string
+          id: string
+          timestamp: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          details?: Json | null
+          feature_name: string
+          id?: string
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          details?: Json | null
+          feature_name?: string
+          id?: string
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       user_preferences: {
         Row: {
@@ -351,6 +780,33 @@ export type Database = {
           id?: string
           ui_mode?: Database["public"]["Enums"]["ui_mode"] | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_secrets: {
+        Row: {
+          created_at: string | null
+          encrypted_value: string
+          id: string
+          secret_type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_value: string
+          id?: string
+          secret_type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_value?: string
+          id?: string
+          secret_type?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -384,9 +840,96 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      decrypted_user_secrets: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          secret: string | null
+          secret_type: string | null
+          secret_value: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          secret?: string | null
+          secret_type?: string | null
+          secret_value?: never
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          secret?: string | null
+          secret_type?: string | null
+          secret_value?: never
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      error_summary: {
+        Row: {
+          component: string | null
+          error_count: number | null
+          log_level: string | null
+          time_bucket: string | null
+        }
+        Relationships: []
+      }
+      error_trends: {
+        Row: {
+          affected_components: number | null
+          change_percentage: number | null
+          day: string | null
+          error_count: number | null
+          log_level: string | null
+        }
+        Relationships: []
+      }
+      performance_summary: {
+        Row: {
+          avg_response_time: number | null
+          endpoint_name: string | null
+          max_response_time: number | null
+          min_response_time: number | null
+          success_rate: number | null
+          successful_requests: number | null
+          time_bucket: string | null
+          total_requests: number | null
+        }
+        Relationships: []
+      }
+      usage_summary: {
+        Row: {
+          action_type: string | null
+          day: string | null
+          feature_name: string | null
+          unique_users: number | null
+          usage_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      decrypt_secret: {
+        Args: {
+          encrypted_secret: string
+        }
+        Returns: string
+      }
+      encrypt_secret: {
+        Args: {
+          secret: string
+        }
+        Returns: string
+      }
+      get_encryption_key: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       match_knowledge_base: {
         Args: {
           query_text: string
@@ -402,6 +945,32 @@ export type Database = {
           content: string
           similarity: number
         }[]
+      }
+      match_knowledge_base_and_products: {
+        Args: {
+          query_text: string
+          query_embedding: string
+          match_count?: number
+          full_text_weight?: number
+          semantic_weight?: number
+          match_threshold?: number
+          rrf_k?: number
+        }
+        Returns: {
+          id: string
+          content: string
+          similarity: number
+          source: string
+          metadata: Json
+        }[]
+      }
+      store_user_secret: {
+        Args: {
+          p_user_id: string
+          p_secret_type: string
+          p_secret_value: string
+        }
+        Returns: string
       }
     }
     Enums: {

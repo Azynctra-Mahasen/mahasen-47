@@ -34,7 +34,14 @@ export class AutomatedTicketService {
         priority: this.determinePriority(params.analysis)
       };
 
-      return await TicketService.createTicket(ticketData);
+      try {
+        const ticket = await TicketService.createTicket(ticketData);
+        console.log('Successfully created automated ticket:', ticket);
+        return ticket;
+      } catch (error) {
+        console.error('Failed to create automated ticket:', error);
+        throw error;
+      }
     }
     
     return null;

@@ -3,7 +3,7 @@ import { generateGroqSystemPrompt, generateGeminiIntentPrompt } from './prompts.
 import { GroqHandler } from './services/model-handlers/groq-handler.ts';
 import { GeminiHandler } from './services/model-handlers/gemini-handler.ts';
 import { TicketHandler } from './services/ticket-handler.ts';
-import { searchKnowledgeBase } from './services/knowledge-base.ts';
+import { searchKnowledgeBase, formatKnowledgeBaseContext } from './services/knowledge-base.ts';
 
 export async function generateAIResponse(message: string, context: any, aiSettings: any): Promise<string> {
   try {
@@ -17,13 +17,17 @@ export async function generateAIResponse(message: string, context: any, aiSettin
     });
 
     // Search knowledge base with the embedding
-    const knowledgeBaseContext = await searchKnowledgeBase(embedding);
-    console.log('Knowledge base context:', knowledgeBaseContext);
+    const searchResults = await searchKnowledgeBase(embedding);
+    console.log('Search results:', searchResults);
+
+    // Format knowledge base context
+    const formattedContext = await formatKnowledgeBaseContext(searchResults);
+    console.log('Formatted context:', formattedContext);
 
     // Update context with knowledge base results
     const updatedContext = {
       ...context,
-      knowledgeBase: knowledgeBaseContext || context.knowledgeBase || ''
+      knowledgeBase: formattedContext || context.knowledgeBase || ''
     };
 
     if (aiSettings.model_name === 'llama-3.3-70b-versatile') {

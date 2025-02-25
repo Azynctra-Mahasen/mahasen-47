@@ -1,3 +1,4 @@
+
 import {
   Table,
   TableBody,
@@ -7,11 +8,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowUpNarrowWide, ArrowDownNarrowWide } from "lucide-react";
+import { ArrowUpNarrowWide, ArrowDownNarrowWide, CheckSquare } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useEffect } from "react";
 import { TicketDetailsDialog } from "./TicketDetailsDialog";
 import { Ticket, TicketPriority } from "@/types/ticket";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface TicketListProps {
   tickets: Ticket[];
@@ -46,6 +50,8 @@ export const TicketList = ({ tickets, loading, sortConfig, onSortChange }: Ticke
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [selectedTickets, setSelectedTickets] = useState<Set<number>>(new Set());
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -69,9 +75,59 @@ export const TicketList = ({ tickets, loading, sortConfig, onSortChange }: Ticke
     );
   };
 
-  const handleTicketClick = (ticket: Ticket) => {
-    setSelectedTicket(ticket);
-    setDetailsOpen(true);
+  const handleTicketClick = (ticket: Ticket, event: React.MouseEvent) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      setSelectedTickets(prev => {
+        const newSelection = new Set(prev);
+        if (newSelection.has(ticket.id)) {
+          newSelection.delete(ticket.id);
+        } else {
+          newSelection.add(ticket.id);
+        }
+        return newSelection;
+      });
+    } else if (!selectedTickets.size) {
+      setSelectedTicket(ticket);
+      setDetailsOpen(true);
+    }
+  };
+
+  const handleMarkSelectedAsCompleted = async () => {
+    if (selectedTickets.size === 0) return;
+    
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({ status: 'Completed', last_updated_at: new Date().toISOString() })
+        .in('id', Array.from(selectedTickets));
+
+      if (error) throw error;
+
+      // Add history entries for each ticket
+      const historyEntries = Array.from(selectedTickets).map(ticketId => ({
+        ticket_id: ticketId,
+        action: 'Status Update',
+        previous_status: 'In Progress',
+        new_status: 'Completed',
+        changed_by: 'Agent'
+      }));
+
+      const { error: historyError } = await supabase
+        .from('ticket_history')
+        .insert(historyEntries);
+
+      if (historyError) throw historyError;
+
+      toast.success(`${selectedTickets.size} tickets marked as completed`);
+      setSelectedTickets(new Set());
+    } catch (error) {
+      console.error('Error updating tickets:', error);
+      toast.error('Failed to update tickets');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const sortedTickets = [...tickets].sort((a, b) => {
@@ -86,91 +142,115 @@ export const TicketList = ({ tickets, loading, sortConfig, onSortChange }: Ticke
   }
 
   return (
-    <div className="relative overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-20 cursor-pointer" onClick={() => handleSort('id')}>
-              ID {getSortIcon('id')}
-            </TableHead>
-            <TableHead className="w-48 cursor-pointer" onClick={() => handleSort('title')}>
-              Title {getSortIcon('title')}
-            </TableHead>
-            <TableHead className="hidden md:table-cell w-40 cursor-pointer" onClick={() => handleSort('customer_name')}>
-              Customer Name {getSortIcon('customer_name')}
-            </TableHead>
-            <TableHead className="hidden sm:table-cell w-32 cursor-pointer" onClick={() => handleSort('platform')}>
-              Platform {getSortIcon('platform')}
-            </TableHead>
-            <TableHead className="hidden lg:table-cell w-32 cursor-pointer" onClick={() => handleSort('type')}>
-              Type {getSortIcon('type')}
-            </TableHead>
-            <TableHead className="w-32 cursor-pointer" onClick={() => handleSort('status')}>
-              Status {getSortIcon('status')}
-            </TableHead>
-            <TableHead className="hidden sm:table-cell w-32 cursor-pointer" onClick={() => handleSort('priority')}>
-              Priority {getSortIcon('priority')}
-            </TableHead>
-            <TableHead className="hidden lg:table-cell w-32">
-              Assigned To
-            </TableHead>
-            <TableHead className="hidden md:table-cell w-40 cursor-pointer" onClick={() => handleSort('created_at')}>
-              Created {getSortIcon('created_at')}
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading ? (
+    <div className="space-y-4">
+      {selectedTickets.size > 0 && (
+        <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
+          <span className="text-sm text-muted-foreground">
+            {selectedTickets.size} tickets selected
+          </span>
+          <Button
+            onClick={handleMarkSelectedAsCompleted}
+            disabled={isProcessing}
+            variant="default"
+            size="sm"
+            className="gap-2"
+          >
+            <CheckSquare className="h-4 w-4" />
+            Mark as Completed
+          </Button>
+        </div>
+      )}
+      
+      <div className="relative overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={9} className="text-center py-8">
-                Loading tickets...
-              </TableCell>
+              <TableHead className="w-20 cursor-pointer" onClick={() => handleSort('id')}>
+                ID {getSortIcon('id')}
+              </TableHead>
+              <TableHead className="w-48 cursor-pointer" onClick={() => handleSort('title')}>
+                Title {getSortIcon('title')}
+              </TableHead>
+              <TableHead className="hidden md:table-cell w-40 cursor-pointer" onClick={() => handleSort('customer_name')}>
+                Customer Name {getSortIcon('customer_name')}
+              </TableHead>
+              <TableHead className="hidden sm:table-cell w-32 cursor-pointer" onClick={() => handleSort('platform')}>
+                Platform {getSortIcon('platform')}
+              </TableHead>
+              <TableHead className="hidden lg:table-cell w-32 cursor-pointer" onClick={() => handleSort('type')}>
+                Type {getSortIcon('type')}
+              </TableHead>
+              <TableHead className="w-32 cursor-pointer" onClick={() => handleSort('status')}>
+                Status {getSortIcon('status')}
+              </TableHead>
+              <TableHead className="hidden sm:table-cell w-32 cursor-pointer" onClick={() => handleSort('priority')}>
+                Priority {getSortIcon('priority')}
+              </TableHead>
+              <TableHead className="hidden lg:table-cell w-32">
+                Assigned To
+              </TableHead>
+              <TableHead className="hidden md:table-cell w-40 cursor-pointer" onClick={() => handleSort('created_at')}>
+                Created {getSortIcon('created_at')}
+              </TableHead>
             </TableRow>
-          ) : sortedTickets.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={9} className="text-center py-8">
-                No tickets found
-              </TableCell>
-            </TableRow>
-          ) : (
-            sortedTickets.map((ticket) => (
-              <TableRow 
-                key={ticket.id} 
-                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                onClick={() => handleTicketClick(ticket)}
-              >
-                <TableCell>#{ticket.id}</TableCell>
-                <TableCell className="font-medium">{ticket.title}</TableCell>
-                <TableCell className="hidden md:table-cell">{ticket.customer_name}</TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  <Badge variant="secondary" className={platformColors[ticket.platform]}>
-                    {ticket.platform}
-                  </Badge>
-                </TableCell>
-                <TableCell className="hidden lg:table-cell">{ticket.type}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className={statusColors[ticket.status]}>
-                    {ticket.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  {ticket.priority && (
-                    <Badge variant="secondary" className={priorityColors[ticket.priority]}>
-                      {ticket.priority}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="hidden lg:table-cell">
-                  {ticket.assigned_to || '-'}
-                </TableCell>
-                <TableCell className="hidden md:table-cell">
-                  {format(new Date(ticket.created_at), "MMM d, yyyy HH:mm")}
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-8">
+                  Loading tickets...
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            ) : sortedTickets.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-8">
+                  No tickets found
+                </TableCell>
+              </TableRow>
+            ) : (
+              sortedTickets.map((ticket) => (
+                <TableRow 
+                  key={ticket.id} 
+                  className={`cursor-pointer transition-colors ${
+                    selectedTickets.has(ticket.id) 
+                      ? 'bg-blue-50 dark:bg-blue-900/20' 
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                  onClick={(e) => handleTicketClick(ticket, e)}
+                >
+                  <TableCell>#{ticket.id}</TableCell>
+                  <TableCell className="font-medium">{ticket.title}</TableCell>
+                  <TableCell className="hidden md:table-cell">{ticket.customer_name}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <Badge variant="secondary" className={platformColors[ticket.platform]}>
+                      {ticket.platform}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">{ticket.type}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className={statusColors[ticket.status]}>
+                      {ticket.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    {ticket.priority && (
+                      <Badge variant="secondary" className={priorityColors[ticket.priority]}>
+                        {ticket.priority}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    {ticket.assigned_to || '-'}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {format(new Date(ticket.created_at), "MMM d, yyyy HH:mm")}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
       <TicketDetailsDialog
         ticket={selectedTicket}

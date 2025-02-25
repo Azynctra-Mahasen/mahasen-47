@@ -13,6 +13,13 @@ export const useMessageUpdates = (platform: Platform | undefined) => {
 
     console.log('Setting up real-time subscription for messages');
 
+    // First, check if a channel with this name already exists and remove it
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === 'messages-updates');
+    if (existingChannel) {
+      console.log('Found existing channel, removing it first');
+      supabase.removeChannel(existingChannel);
+    }
+
     const channel = supabase
       .channel('messages-updates')
       .on(
@@ -44,9 +51,12 @@ export const useMessageUpdates = (platform: Platform | undefined) => {
         }
       });
 
+    // Cleanup function
     return () => {
       console.log("Cleaning up subscription");
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [platform, queryClient]);
 };

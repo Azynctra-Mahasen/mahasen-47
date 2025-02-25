@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { FileText, Network, Settings } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -18,26 +19,18 @@ export const DashboardHeader = ({ userName, onNavigate, onSignOut }: DashboardHe
       <div className="flex items-center gap-4">
         <Button
           variant="outline"
-          onClick={() => onNavigate("/knowledge-base")}
+          onClick={() => onNavigate("/settings")}
           className="flex items-center gap-2"
         >
-          <FileText className="h-4 w-4" />
-          Manage Files
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => onNavigate("/agent-flow")}
-          className="flex items-center gap-2"
-        >
-          <Network className="h-4 w-4" />
-          Agent Flow
+          <Settings className="h-4 w-4" />
+          Settings
         </Button>
         <Button
           variant="outline"
           onClick={() => onNavigate("/ai-settings")}
           className="flex items-center gap-2"
         >
-          <Settings className="h-4 w-4" />
+          <FileText className="h-4 w-4" />
           AI Settings
         </Button>
         <ThemeToggle />

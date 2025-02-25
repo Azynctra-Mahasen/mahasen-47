@@ -28,7 +28,7 @@ export const Navigation = () => {
             </Button>
             <ThemeToggle />
             <Button 
-              onClick={() => window.open("https://wa.me/message/TTJHEFNWX2KKF1", "_blank")}
+              onClick={() => navigate("/signup")}
               className="text-primary-foreground"
             >
               Get Started

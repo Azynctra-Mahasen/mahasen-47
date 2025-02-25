@@ -1,3 +1,4 @@
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const supabase = createClient(
@@ -31,6 +32,7 @@ interface AutomatedTicketParams {
   platform: 'whatsapp' | 'facebook' | 'instagram';
   messageContent: string;
   context: string;
+  whatsappMessageId?: string;
 }
 
 export class AutomatedTicketService {
@@ -45,10 +47,10 @@ export class AutomatedTicketService {
         title: this.generateTicketTitle(params.analysis),
         customer_name: params.customerName,
         platform: params.platform,
-        type: params.analysis.detected_entities?.issue_type || "Order",
+        type: params.analysis.detected_entities?.issue_type || "ORDER",
         body: params.messageContent,
-        message_id: params.messageId,
         conversation_id: params.conversationId,
+        whatsapp_message_id: params.whatsappMessageId, // Using the correct column name
         intent_type: this.determineTicketType(params.analysis),
         context: params.context,
         confidence_score: params.analysis.confidence,
@@ -68,6 +70,21 @@ export class AutomatedTicketService {
       if (error) {
         console.error('Error creating ticket:', error);
         throw error;
+      }
+
+      // If the ticket is created successfully and it's a WhatsApp message, create the ticket_messages association
+      if (ticket && params.whatsappMessageId) {
+        const { error: messageError } = await supabase
+          .from('ticket_messages')
+          .insert({
+            ticket_id: ticket.id,
+            message_id: params.messageId,
+            created_at: new Date().toISOString()
+          });
+
+        if (messageError) {
+          console.error('Error creating ticket_message association:', messageError);
+        }
       }
 
       console.log('Successfully created ticket:', ticket);
