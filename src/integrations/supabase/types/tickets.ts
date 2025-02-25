@@ -24,6 +24,7 @@ export type TicketTables = {
       order_status?: string;
       confirmation_message_id?: string;
       whatsapp_message_id?: string;
+      user_id: string;
     };
     Insert: {
       body: string;
@@ -40,6 +41,7 @@ export type TicketTables = {
       context?: string;
       escalation_reason?: string;
       priority?: string;
+      user_id?: string;
     };
     Update: {
       body?: string;
@@ -61,6 +63,7 @@ export type TicketTables = {
       order_status?: string;
       confirmation_message_id?: string;
       whatsapp_message_id?: string;
+      user_id?: string;
     };
     Relationships: [];
   };

@@ -12,6 +12,7 @@ export type MessageTables = {
       sender_name: string;
       sender_number: string;
       status: DatabaseEnums["message_status"];
+      user_id: string;
     };
     Insert: {
       content: string;
@@ -22,6 +23,7 @@ export type MessageTables = {
       sender_name: string;
       sender_number: string;
       status: DatabaseEnums["message_status"];
+      user_id?: string;
     };
     Update: {
       content?: string;
@@ -32,6 +34,7 @@ export type MessageTables = {
       sender_name?: string;
       sender_number?: string;
       status?: DatabaseEnums["message_status"];
+      user_id?: string;
     };
     Relationships: [
       {

@@ -11,6 +11,7 @@ export type ConversationTables = {
       id: string;
       platform: DatabaseEnums["platform"];
       updated_at: string | null;
+      user_id: string;
     };
     Insert: {
       ai_enabled?: boolean | null;
@@ -20,6 +21,7 @@ export type ConversationTables = {
       id?: string;
       platform: DatabaseEnums["platform"];
       updated_at?: string | null;
+      user_id?: string;
     };
     Update: {
       ai_enabled?: boolean | null;
@@ -29,6 +31,7 @@ export type ConversationTables = {
       id?: string;
       platform?: DatabaseEnums["platform"];
       updated_at?: string | null;
+      user_id?: string;
     };
     Relationships: [];
   };
