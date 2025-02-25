@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,7 +39,6 @@ const Settings = () => {
           return;
         }
 
-        // Get the user's profile
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('username, profile_url, whatsapp_number')
@@ -59,7 +57,6 @@ const Settings = () => {
           setProfileUrl(profileData.profile_url ?? "");
         }
 
-        // Get user's secrets from encrypted storage
         const { data: secretsData, error: secretsError } = await supabase
           .from('decrypted_user_secrets')
           .select('secret_type, secret_value')
@@ -95,14 +92,10 @@ const Settings = () => {
     getProfile();
   }, [navigate, toast]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleFileUpload = async (file: File) => {
     try {
       setLoading(true);
       
-      // Check file size (2MB limit)
       if (file.size > 2 * 1024 * 1024) {
         throw new Error("File size must be less than 2MB");
       }
@@ -112,11 +105,9 @@ const Settings = () => {
         throw new Error("No active session");
       }
 
-      // Create a unique file name using user ID and timestamp
       const fileExt = file.name.split('.').pop();
       const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
 
-      // Delete old profile picture if it exists
       if (profileUrl) {
         const oldFileName = profileUrl.split('/').pop();
         if (oldFileName) {
@@ -126,7 +117,6 @@ const Settings = () => {
         }
       }
 
-      // Upload the new file
       const { error: uploadError } = await supabase.storage
         .from('profile-pictures')
         .upload(fileName, file, {
@@ -136,12 +126,10 @@ const Settings = () => {
 
       if (uploadError) throw uploadError;
 
-      // Get the public URL
       const { data: { publicUrl } } = supabase.storage
         .from('profile-pictures')
         .getPublicUrl(fileName);
 
-      // Update the profile with the new picture URL
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
@@ -200,7 +188,6 @@ const Settings = () => {
         throw new Error("No active session");
       }
 
-      // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
@@ -214,7 +201,6 @@ const Settings = () => {
         throw profileError;
       }
 
-      // Store each secret in encrypted storage
       const { data: phoneIdData, error: phoneIdError } = await supabase
         .rpc('store_user_secret', {
           p_user_id: session.user.id,
