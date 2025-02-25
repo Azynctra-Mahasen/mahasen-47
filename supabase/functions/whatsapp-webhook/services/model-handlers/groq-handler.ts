@@ -25,8 +25,8 @@ export class GroqHandler {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: message }
           ],
-          temperature: 0.7,
-          max_tokens: 1000,
+          temperature: 0.1,
+          max_tokens: 2000,
         }),
       });
 
