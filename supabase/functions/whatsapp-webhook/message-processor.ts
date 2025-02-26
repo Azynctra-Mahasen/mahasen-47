@@ -1,100 +1,83 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { storeConversation, storeAIResponse } from "./database.ts";
-import { generateAIResponse } from "./ollama.ts";
-import { MessageBatcherService } from "./services/message-batcher.ts";
-import { getAISettings } from "./ai-settings.ts";
-import { sendWhatsAppMessage } from "./whatsapp.ts";
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-async function processMessageBatch(
-  whatsappMessageId: string,
-  batchedMessage: string,
-  userId: string,
-  userName: string,
-  phoneId: string,
-  accessToken: string
-): Promise<void> {
-  try {
-    console.log('Processing message batch:', { whatsappMessageId, batchedMessage, userId, userName });
-    
-    const conversationId = await storeConversation(
-      supabase,
-      userId,
-      userName,
-      batchedMessage,
-      'whatsapp'
-    );
-
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('ai_enabled, contact_number')
-      .eq('id', conversationId)
-      .single();
-
-    if (conversation?.ai_enabled) {
-      const aiSettings = await getAISettings();
-      console.log('Using AI settings:', aiSettings);
-
-      const aiResponse = await generateAIResponse(batchedMessage, {
-        messageId: whatsappMessageId,
-        conversationId: conversationId,
-        userName: userName,
-        knowledgeBase: ''
-      }, aiSettings);
-
-      // Store AI response in database
-      await storeAIResponse(supabase, conversationId, aiResponse);
-
-      // Send the WhatsApp message using user-specific secrets
-      if (conversation.contact_number) {
-        await sendWhatsAppMessage(
-          conversation.contact_number,
-          aiResponse,
-          accessToken,
-          phoneId
-        );
-      }
-    }
-  } catch (error) {
-    console.error('Error processing batched message:', error);
-    throw error;
-  }
-}
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 export async function processWhatsAppMessage(
-  whatsappMessageId: string,
-  userMessage: string,
+  messageId: string,
+  message: string,
   userId: string,
   userName: string,
   phoneId: string,
   accessToken: string
-): Promise<void> {
-  console.log('Processing WhatsApp message:', { whatsappMessageId, userMessage, userId, userName });
+) {
+  console.log('Starting message processing:', { messageId, userId, userName });
 
   try {
-    await MessageBatcherService.processBatchedMessage(
-      userId,
-      userMessage,
-      async (batchedMessage) => {
-        await processMessageBatch(
-          whatsappMessageId,
-          batchedMessage,
-          userId,
-          userName,
-          phoneId,
-          accessToken
-        );
-      }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const batchSize = MessageBatcherService.getCurrentBatchSize(userId);
-    console.log(`Current batch size for user ${userId}: ${batchSize}`);
+    console.log('Checking for existing conversation...');
+
+    // Check if conversation exists
+    const { data: existingConversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('contact_number', userId)
+      .single();
+
+    if (conversationError) {
+      console.error('Error checking conversation:', conversationError);
+      throw conversationError;
+    }
+
+    let conversationId;
+    if (existingConversation) {
+      console.log('Found existing conversation:', existingConversation.id);
+      conversationId = existingConversation.id;
+    } else {
+      console.log('Creating new conversation...');
+      // Create new conversation
+      const { data: newConversation, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          contact_name: userName,
+          contact_number: userId,
+          platform: 'whatsapp',
+          ai_enabled: true
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating conversation:', createError);
+        throw createError;
+      }
+      console.log('Created new conversation:', newConversation.id);
+      conversationId = newConversation.id;
+    }
+
+    console.log('Saving message to database...');
+    // Save message to database
+    const { error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        content: message,
+        status: 'received',
+        sender_name: userName,
+        sender_number: userId,
+        read: false
+      });
+
+    if (messageError) {
+      console.error('Error saving message:', messageError);
+      throw messageError;
+    }
+
+    console.log('Message processed and saved successfully');
+    return { success: true };
   } catch (error) {
-    console.error('Error in message processing:', error);
+    console.error('Error in processWhatsAppMessage:', error);
     throw error;
   }
 }
