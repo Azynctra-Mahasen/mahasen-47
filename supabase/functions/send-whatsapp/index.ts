@@ -17,10 +17,16 @@ serve(async (req) => {
     const { to, message, type, useAI = false, phoneId, accessToken } = await req.json();
 
     if (!to || !message || !phoneId || !accessToken) {
+      console.error('Missing required parameters:', { 
+        hasTo: !!to, 
+        hasMessage: !!message, 
+        hasPhoneId: !!phoneId, 
+        hasAccessToken: !!accessToken 
+      });
       throw new Error('Missing required parameters');
     }
 
-    console.log('Received request:', { to, message, type, useAI });
+    console.log('Received request:', { to, type, useAI });
 
     // Send message to WhatsApp
     const whatsappData = await sendWhatsAppMessage(to, message, accessToken, phoneId);
