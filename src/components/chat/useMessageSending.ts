@@ -18,16 +18,26 @@ export const useMessageSending = (
   const { toast } = useToast();
 
   const sendMessage = async (newMessage: string) => {
-    if (!newMessage.trim() || !id || !contactNumber) return;
+    if (!newMessage.trim() || !id || !contactNumber) {
+      console.error("Missing required data:", { id, contactNumber, messageLength: newMessage.length });
+      return;
+    }
     
     setIsSending(true);
     try {
+      console.log("Starting message send process...");
+      
       // Get WhatsApp configuration
       const secrets = await getWhatsAppSecrets();
+      console.log("WhatsApp secrets retrieved successfully");
 
       // Save message to database
       const { error: dbError } = await saveMessageToDatabase(id, newMessage);
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error("Database error:", dbError);
+        throw dbError;
+      }
+      console.log("Message saved to database successfully");
 
       // Send WhatsApp message
       const messagePayload: WhatsAppMessage = {
@@ -39,8 +49,19 @@ export const useMessageSending = (
         accessToken: secrets.whatsapp_access_token
       };
 
+      console.log("Sending WhatsApp message with payload:", {
+        to: messagePayload.to,
+        type: messagePayload.type,
+        useAI: messagePayload.useAI,
+        phoneId: messagePayload.phoneId ? "Set" : "Missing"
+      });
+
       const { error: whatsappError } = await sendWhatsAppMessage(messagePayload);
-      if (whatsappError) throw whatsappError;
+      if (whatsappError) {
+        console.error("WhatsApp sending error:", whatsappError);
+        throw whatsappError;
+      }
+      console.log("WhatsApp message sent successfully");
 
       // Update UI
       refetchMessages();
