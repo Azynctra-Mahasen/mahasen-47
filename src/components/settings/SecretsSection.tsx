@@ -23,7 +23,7 @@ export const SecretsSection = ({ secrets, onSecretsChange }: SecretsSectionProps
       <CardHeader className="border-b border-red-200">
         <CardTitle className="text-red-500">Platform Secrets</CardTitle>
         <CardDescription className="text-red-400">
-          Manage your WhatsApp integration secrets
+          Manage your WhatsApp integration secrets. These are required for sending messages.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -34,11 +34,12 @@ export const SecretsSection = ({ secrets, onSecretsChange }: SecretsSectionProps
               <Key className="absolute left-3 top-3 h-4 w-4 text-red-400" />
               <Input
                 id="whatsapp_phone_id"
-                type="password"
+                name="whatsapp_phone_id"
                 value={secrets.whatsapp_phone_id}
                 onChange={(e) => onSecretsChange({ ...secrets, whatsapp_phone_id: e.target.value })}
                 className="pl-10 border-red-200 focus-visible:ring-red-500"
                 placeholder="Enter WhatsApp Phone ID"
+                required
               />
             </div>
           </div>
@@ -49,11 +50,12 @@ export const SecretsSection = ({ secrets, onSecretsChange }: SecretsSectionProps
               <Key className="absolute left-3 top-3 h-4 w-4 text-red-400" />
               <Input
                 id="whatsapp_verify_token"
-                type="password"
+                name="whatsapp_verify_token"
                 value={secrets.whatsapp_verify_token}
                 onChange={(e) => onSecretsChange({ ...secrets, whatsapp_verify_token: e.target.value })}
                 className="pl-10 border-red-200 focus-visible:ring-red-500"
                 placeholder="Enter WhatsApp Verify Token"
+                required
               />
             </div>
           </div>
@@ -64,11 +66,12 @@ export const SecretsSection = ({ secrets, onSecretsChange }: SecretsSectionProps
               <Key className="absolute left-3 top-3 h-4 w-4 text-red-400" />
               <Input
                 id="whatsapp_access_token"
-                type="password"
+                name="whatsapp_access_token"
                 value={secrets.whatsapp_access_token}
                 onChange={(e) => onSecretsChange({ ...secrets, whatsapp_access_token: e.target.value })}
                 className="pl-10 border-red-200 focus-visible:ring-red-500"
                 placeholder="Enter WhatsApp Access Token"
+                required
               />
             </div>
           </div>
