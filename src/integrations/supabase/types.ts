@@ -168,7 +168,6 @@ export type Database = {
           metadata: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at: string | null
-          user_id: string
         }
         Insert: {
           ai_enabled?: boolean
@@ -180,7 +179,6 @@ export type Database = {
           metadata?: Json | null
           platform: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
-          user_id?: string
         }
         Update: {
           ai_enabled?: boolean
@@ -192,7 +190,6 @@ export type Database = {
           metadata?: Json | null
           platform?: Database["public"]["Enums"]["platform_type"]
           updated_at?: string | null
-          user_id?: string
         }
         Relationships: []
       }
@@ -256,7 +253,6 @@ export type Database = {
           sender_name: string
           sender_number: string
           status: Database["public"]["Enums"]["message_status"]
-          user_id: string
           whatsapp_message_id: string | null
         }
         Insert: {
@@ -270,7 +266,6 @@ export type Database = {
           sender_name: string
           sender_number: string
           status: Database["public"]["Enums"]["message_status"]
-          user_id?: string
           whatsapp_message_id?: string | null
         }
         Update: {
@@ -284,7 +279,6 @@ export type Database = {
           sender_name?: string
           sender_number?: string
           status?: Database["public"]["Enums"]["message_status"]
-          user_id?: string
           whatsapp_message_id?: string | null
         }
         Relationships: [
@@ -683,7 +677,6 @@ export type Database = {
           status: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
-          user_id: string
           whatsapp_message_id: string | null
         }
         Insert: {
@@ -706,7 +699,6 @@ export type Database = {
           status?: Database["public"]["Enums"]["ticket_status"]
           title: string
           type: string
-          user_id?: string
           whatsapp_message_id?: string | null
         }
         Update: {
@@ -729,7 +721,6 @@ export type Database = {
           status?: Database["public"]["Enums"]["ticket_status"]
           title?: string
           type?: string
-          user_id?: string
           whatsapp_message_id?: string | null
         }
         Relationships: [

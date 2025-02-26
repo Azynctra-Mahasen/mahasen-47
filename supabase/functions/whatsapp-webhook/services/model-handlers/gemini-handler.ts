@@ -23,7 +23,7 @@ export class GeminiHandler {
               }
             ],
             generationConfig: {
-              temperature: 0.1,
+              temperature: 0.7,
               topP: 0.9,
               topK: 40,
               maxOutputTokens: 1000,

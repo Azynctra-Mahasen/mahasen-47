@@ -1,11 +1,9 @@
 
-import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Camera, Mail, User } from "lucide-react";
-import { ImageCropDialog } from "./ImageCropDialog";
 
 interface ProfileSectionProps {
   username: string;
@@ -13,7 +11,7 @@ interface ProfileSectionProps {
   profileUrl: string;
   loading: boolean;
   onUsernameChange: (value: string) => void;
-  onFileUpload: (file: File) => void;
+  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const ProfileSection = ({
@@ -24,30 +22,6 @@ export const ProfileSection = ({
   onUsernameChange,
   onFileUpload
 }: ProfileSectionProps) => {
-  const [cropDialogOpen, setCropDialogOpen] = useState(false);
-  const [selectedImageUrl, setSelectedImageUrl] = useState("");
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check file size (2MB limit)
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File size must be less than 2MB");
-      return;
-    }
-
-    const imageUrl = URL.createObjectURL(file);
-    setSelectedImageUrl(imageUrl);
-    setCropDialogOpen(true);
-  };
-
-  const handleCropComplete = (croppedBlob: Blob) => {
-    const file = new File([croppedBlob], "cropped-profile-picture.jpg", { type: "image/jpeg" });
-    onFileUpload(file);
-    URL.revokeObjectURL(selectedImageUrl);
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -62,13 +36,9 @@ export const ProfileSection = ({
           <Label>Shop Profile Picture</Label>
           <div className="mt-2 flex items-center space-x-4">
             <Avatar className="h-20 w-20">
-              <AvatarImage 
-                src={profileUrl} 
-                alt={username}
-                className="object-cover"
-              />
+              <AvatarImage src={profileUrl} />
               <AvatarFallback>
-                {username?.slice(0, 2).toUpperCase() || 'SP'}
+                {username.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
@@ -84,7 +54,7 @@ export const ProfileSection = ({
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={handleFileSelect}
+                onChange={onFileUpload}
                 disabled={loading}
               />
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -124,13 +94,6 @@ export const ProfileSection = ({
             />
           </div>
         </div>
-
-        <ImageCropDialog
-          open={cropDialogOpen}
-          onOpenChange={setCropDialogOpen}
-          imageUrl={selectedImageUrl}
-          onCropComplete={handleCropComplete}
-        />
       </CardContent>
     </Card>
   );
