@@ -9,8 +9,6 @@ type UserSecrets = {
 };
 
 export const useSettingsSubmit = () => {
-  const { toast } = useToast();
-
   const handleSave = async (
     setLoading: (loading: boolean) => void,
     username: string,
@@ -71,20 +69,15 @@ export const useSettingsSubmit = () => {
 
       if (accessTokenError) throw accessTokenError;
 
-      toast({
-        title: "Success",
-        description: "Settings and WhatsApp configuration saved successfully",
-      });
+      toast.success("Settings and WhatsApp configuration saved successfully");
 
       // Add a small delay to ensure all data is saved
       await new Promise(resolve => setTimeout(resolve, 1000));
 
     } catch (error) {
       console.error('Error saving settings:', error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save settings",
+      toast.error("Failed to save settings", {
+        description: error instanceof Error ? error.message : "Unknown error occurred"
       });
     } finally {
       setLoading(false);
