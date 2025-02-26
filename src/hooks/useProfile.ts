@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { Database } from "@/integrations/supabase/types";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -14,8 +14,7 @@ type UserSecrets = {
 
 export const useProfile = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
@@ -29,12 +28,19 @@ export const useProfile = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Get current session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          throw new Error("Error fetching session: " + sessionError.message);
+        }
+
         if (!session) {
           navigate("/login");
           return;
         }
 
+        // Fetch profile data
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('username, profile_url, whatsapp_number')
@@ -42,8 +48,22 @@ export const useProfile = () => {
           .single();
 
         if (profileError) {
-          console.error('Error fetching profile:', profileError);
-          throw profileError;
+          if (profileError.code === 'PGRST116') {
+            // No profile found, create one
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert({
+                id: session.user.id,
+                username: session.user.email?.split('@')[0] || 'user',
+                whatsapp_number: ""
+              });
+
+            if (insertError) {
+              throw new Error("Error creating profile: " + insertError.message);
+            }
+          } else {
+            throw new Error("Error fetching profile: " + profileError.message);
+          }
         }
 
         if (profileData) {
@@ -53,19 +73,19 @@ export const useProfile = () => {
           setProfileUrl(profileData.profile_url ?? "");
         }
 
+        // Fetch secrets data
         const { data: secretsData, error: secretsError } = await supabase
           .from('decrypted_user_secrets')
           .select('secret_type, secret_value')
           .eq('user_id', session.user.id);
 
         if (secretsError) {
-          console.error('Error fetching secrets:', secretsError);
-          throw secretsError;
+          throw new Error("Error fetching secrets: " + secretsError.message);
         }
 
         if (secretsData) {
           const secretsMap = secretsData.reduce((acc, curr) => {
-            acc[curr.secret_type] = curr.secret_value;
+            acc[curr.secret_type as keyof UserSecrets] = curr.secret_value;
             return acc;
           }, {} as Record<string, string>);
 
@@ -76,17 +96,17 @@ export const useProfile = () => {
           });
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load profile data",
+        console.error('Error in getProfile:', error);
+        toast.error("Failed to load profile data", {
+          description: error instanceof Error ? error.message : "Please try again later"
         });
+      } finally {
+        setLoading(false);
       }
     };
 
     getProfile();
-  }, [navigate, toast]);
+  }, [navigate]);
 
   return {
     loading,
