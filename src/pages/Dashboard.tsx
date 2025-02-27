@@ -6,6 +6,7 @@ import { MessageSquare, Facebook, Instagram, FileText, Network, Ticket } from "l
 import { PlatformCard } from "@/components/dashboard/PlatformCard";
 import { UtilityCard } from "@/components/dashboard/UtilityCard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { toast } from "sonner";
 
 const platforms = [
   {
@@ -38,14 +39,44 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/login");
-      } else {
-        setUserName(session.user.email?.split('@')[0] || "User");
+        return;
+      }
+      
+      setUserName(session.user.email?.split('@')[0] || "User");
+      
+      // Check if onboarding is needed
+      try {
+        const { data: platformSecrets, error } = await supabase
+          .from('platform_secrets')
+          .select('whatsapp_phone_id, whatsapp_verify_token, whatsapp_access_token')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        // If there's no platform_secrets record or missing fields, redirect to onboarding
+        if (error || !platformSecrets || 
+            !platformSecrets.whatsapp_phone_id || 
+            !platformSecrets.whatsapp_verify_token || 
+            !platformSecrets.whatsapp_access_token) {
+          
+          toast.info("Let's set up your WhatsApp integration", {
+            description: "You need to configure WhatsApp to start using the platform",
+            duration: 5000
+          });
+          
+          navigate("/onboarding");
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking onboarding status:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -71,6 +102,14 @@ const Dashboard = () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
