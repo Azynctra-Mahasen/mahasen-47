@@ -37,7 +37,7 @@ export const useProfile = () => {
           setUsername(profileData.username || "");
           setEmail(session.user.email || "");
           setWhatsappNumber(profileData.whatsapp_number || "");
-          setProfileUrl(profileData.avatar_url || "");
+          setProfileUrl(profileData.profile_url || "");
         }
 
         // Get secrets
