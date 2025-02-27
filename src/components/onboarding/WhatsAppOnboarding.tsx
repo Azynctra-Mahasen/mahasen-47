@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -164,13 +163,6 @@ export const WhatsAppOnboarding = () => {
               >
                 Get Started <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-              <div className="w-full flex justify-center mt-4">
-                <img 
-                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
-                  alt="Mahasen AI - AI for People" 
-                  className="h-10 mt-4" 
-                />
-              </div>
             </CardFooter>
           </Card>
         );
@@ -219,13 +211,6 @@ export const WhatsAppOnboarding = () => {
                 >
                   Next <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-              </div>
-              <div className="w-full flex justify-center mt-4">
-                <img 
-                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
-                  alt="Mahasen AI - AI for People" 
-                  className="h-10 mt-4" 
-                />
               </div>
             </CardFooter>
           </Card>
@@ -318,13 +303,6 @@ export const WhatsAppOnboarding = () => {
                   {loading ? "Saving..." : "Save Configuration"}
                 </Button>
               </div>
-              <div className="w-full flex justify-center mt-4">
-                <img 
-                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
-                  alt="Mahasen AI - AI for People" 
-                  className="h-10 mt-4" 
-                />
-              </div>
             </CardFooter>
           </Card>
         );
@@ -380,13 +358,6 @@ export const WhatsAppOnboarding = () => {
                   View WhatsApp Chats
                 </Button>
               </div>
-              <div className="w-full flex justify-center mt-4">
-                <img 
-                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
-                  alt="Mahasen AI - AI for People" 
-                  className="h-10 mt-4" 
-                />
-              </div>
             </CardFooter>
           </Card>
         );
@@ -397,6 +368,13 @@ export const WhatsAppOnboarding = () => {
     <div className="container mx-auto py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {renderStepContent()}
+      </div>
+      <div className="w-full flex justify-center mt-auto fixed bottom-12 left-0">
+        <img 
+          src="../src/uploads/onboarding_footer.png" 
+          alt="Mahasen AI - AI for People" 
+          className="h-10" 
+        />
       </div>
     </div>
   );
