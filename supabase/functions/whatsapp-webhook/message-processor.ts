@@ -1,5 +1,4 @@
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { storeConversation, storeAIResponse } from "./database.ts";
 import { generateAIResponse } from "./ollama.ts";
 import { MessageBatcherService } from "./services/message-batcher.ts";
