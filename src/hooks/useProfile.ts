@@ -75,6 +75,9 @@ export const useProfile = () => {
           setProfileUrl(profileData.profile_url ?? "");
         }
 
+        // Define secretsMap at a higher scope so it can be accessed later
+        let secretsMap: Record<string, string> = {};
+
         // Fetch secrets data
         const { data: secretsData, error: secretsError } = await supabase
           .from('decrypted_user_secrets')
@@ -86,7 +89,7 @@ export const useProfile = () => {
         }
 
         if (secretsData) {
-          const secretsMap = secretsData.reduce((acc, curr) => {
+          secretsMap = secretsData.reduce((acc, curr) => {
             acc[curr.secret_type as keyof UserSecrets] = curr.secret_value;
             return acc;
           }, {} as Record<string, string>);
@@ -112,9 +115,9 @@ export const useProfile = () => {
             .from('platform_secrets')
             .insert({
               user_id: session.user.id,
-              whatsapp_phone_id: secretsMap?.whatsapp_phone_id || "",
-              whatsapp_verify_token: secretsMap?.whatsapp_verify_token || "",
-              whatsapp_access_token: secretsMap?.whatsapp_access_token || ""
+              whatsapp_phone_id: secretsMap.whatsapp_phone_id || "",
+              whatsapp_verify_token: secretsMap.whatsapp_verify_token || "",
+              whatsapp_access_token: secretsMap.whatsapp_access_token || ""
             });
         }
       } catch (error) {
