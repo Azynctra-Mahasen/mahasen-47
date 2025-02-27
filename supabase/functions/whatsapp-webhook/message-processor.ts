@@ -1,190 +1,100 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
-interface OrderContext {
-  product_name: string;
-  quantity: number;
-  price: number;
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { storeConversation, storeAIResponse } from "./database.ts";
+import { generateAIResponse } from "./ollama.ts";
+import { MessageBatcherService } from "./services/message-batcher.ts";
+import { getAISettings } from "./ai-settings.ts";
+import { sendWhatsAppMessage } from "./whatsapp.ts";
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+async function processMessageBatch(
+  whatsappMessageId: string,
+  batchedMessage: string,
+  userId: string,
+  userName: string,
+  phoneId: string,
+  accessToken: string
+): Promise<void> {
+  try {
+    console.log('Processing message batch:', { whatsappMessageId, batchedMessage, userId, userName });
+    
+    const conversationId = await storeConversation(
+      supabase,
+      userId,
+      userName,
+      batchedMessage,
+      'whatsapp'
+    );
+
+    const { data: conversation } = await supabase
+      .from('conversations')
+      .select('ai_enabled, contact_number')
+      .eq('id', conversationId)
+      .single();
+
+    if (conversation?.ai_enabled) {
+      const aiSettings = await getAISettings();
+      console.log('Using AI settings:', aiSettings);
+
+      const aiResponse = await generateAIResponse(batchedMessage, {
+        messageId: whatsappMessageId,
+        conversationId: conversationId,
+        userName: userName,
+        knowledgeBase: ''
+      }, aiSettings);
+
+      // Store AI response in database
+      await storeAIResponse(supabase, conversationId, aiResponse);
+
+      // Send the WhatsApp message using user-specific secrets
+      if (conversation.contact_number) {
+        await sendWhatsAppMessage(
+          conversation.contact_number,
+          aiResponse,
+          accessToken,
+          phoneId
+        );
+      }
+    }
+  } catch (error) {
+    console.error('Error processing batched message:', error);
+    throw error;
+  }
 }
 
 export async function processWhatsAppMessage(
-  messageId: string,
+  whatsappMessageId: string,
   userMessage: string,
   userId: string,
   userName: string,
   phoneId: string,
   accessToken: string
-): Promise<{ success: boolean }> {
-  console.log(`Processing message ${messageId} from ${userName} (${userId})`);
-
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Step 1: Find or create conversation
-    const conversationId = await findOrCreateConversation(supabase, userId, userName);
-    
-    // Step 2: Check if this is an order confirmation
-    if (isOrderConfirmation(userMessage)) {
-      // Get the latest order context from conversation_contexts
-      const { data: contextData } = await supabase
-        .from('conversation_contexts')
-        .select('context_data')
-        .eq('conversation_id', conversationId)
-        .eq('context_type', 'order_placement')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (contextData?.context_data) {
-        const orderContext = contextData.context_data as OrderContext;
-        
-        // Create ticket for the order
-        const { data: ticket, error: ticketError } = await supabase
-          .from('tickets')
-          .insert({
-            title: `Order: ${orderContext.product_name}`,
-            customer_name: userName,
-            platform: 'whatsapp',
-            type: 'Order',
-            status: 'New',
-            priority: 'HIGH',
-            body: `Product: ${orderContext.product_name}\nQuantity: ${orderContext.quantity}`,
-            conversation_id: conversationId,
-            product_info: orderContext
-          })
-          .select()
-          .single();
-
-        if (ticketError) {
-          throw ticketError;
-        }
-
-        // Send confirmation message
-        const confirmationMessage = `Your Order for ${orderContext.product_name} for ${orderContext.quantity} is placed successfully. Order Number is ${ticket.id}.`;
-        
-        const response = await fetch(
-          `https://graph.facebook.com/v17.0/${phoneId}/messages`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: userId,
-              type: 'text',
-              text: { body: confirmationMessage }
-            })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to send WhatsApp confirmation message');
-        }
-
-        // Store the confirmation message in the database
-        await storeMessage(supabase, conversationId, confirmationMessage, 'system', 'Agent');
-      }
-    }
-
-    // Step 3: Store the original message
-    await storeMessage(supabase, conversationId, userMessage, userId, userName);
-    
-    console.log(`Message ${messageId} processed successfully`);
-    return { success: true };
-  } catch (error) {
-    console.error('Error processing WhatsApp message:', error);
-    throw error;
-  }
-}
-
-function isOrderConfirmation(message: string): boolean {
-  const confirmationKeywords = ['yes', 'ow', 'ඔව්'];
-  return confirmationKeywords.some(keyword => 
-    message.toLowerCase().trim() === keyword.toLowerCase()
-  );
-}
-
-async function findOrCreateConversation(
-  supabase: any, 
-  userId: string, 
-  userName: string
-): Promise<string> {
-  console.log('Looking for existing conversation');
-  
-  // Check if conversation exists
-  const { data: conversations, error: conversationError } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('contact_number', userId);
-
-  if (conversationError) {
-    console.error('Error checking for existing conversation:', conversationError);
-    throw conversationError;
-  }
-
-  // If conversation exists, return its ID
-  if (conversations && conversations.length > 0) {
-    console.log('Found existing conversation:', conversations[0].id);
-    return conversations[0].id;
-  }
-
-  // Otherwise create a new conversation
-  console.log('Creating new conversation for:', userName);
-  try {
-    const { data: newConversation, error: createError } = await supabase
-      .from('conversations')
-      .insert({
-        contact_name: userName,
-        contact_number: userId,
-        platform: 'whatsapp',
-        ai_enabled: true
-      })
-      .select();
-
-    if (createError) {
-      console.error('Error creating conversation:', createError);
-      throw createError;
-    }
-
-    if (!newConversation || newConversation.length === 0) {
-      throw new Error('Failed to create conversation: No data returned');
-    }
-
-    console.log('Created new conversation:', newConversation[0].id);
-    return newConversation[0].id;
-  } catch (error) {
-    console.error('Error in conversation creation:', error);
-    throw error;
-  }
-}
-
-async function storeMessage(
-  supabase: any,
-  conversationId: string,
-  content: string,
-  senderNumber: string,
-  senderName: string
 ): Promise<void> {
-  console.log(`Storing message in conversation ${conversationId}`);
-  
-  const { error } = await supabase
-    .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      content,
-      status: 'received',
-      sender_name: senderName,
-      sender_number: senderNumber,
-      read: false
-    });
+  console.log('Processing WhatsApp message:', { whatsappMessageId, userMessage, userId, userName });
 
-  if (error) {
-    console.error('Error storing message:', error);
+  try {
+    await MessageBatcherService.processBatchedMessage(
+      userId,
+      userMessage,
+      async (batchedMessage) => {
+        await processMessageBatch(
+          whatsappMessageId,
+          batchedMessage,
+          userId,
+          userName,
+          phoneId,
+          accessToken
+        );
+      }
+    );
+
+    const batchSize = MessageBatcherService.getCurrentBatchSize(userId);
+    console.log(`Current batch size for user ${userId}: ${batchSize}`);
+  } catch (error) {
+    console.error('Error in message processing:', error);
     throw error;
   }
-  
-  console.log('Message stored successfully');
 }
