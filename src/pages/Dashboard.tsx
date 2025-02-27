@@ -51,20 +51,23 @@ const Dashboard = () => {
       
       setUserName(session.user.email?.split('@')[0] || "User");
       
-      // Check if onboarding is needed
       try {
+        // Check if onboarding is needed - only redirects on strict conditions
         const { data: platformSecrets, error } = await supabase
           .from('platform_secrets')
           .select('whatsapp_phone_id, whatsapp_verify_token, whatsapp_access_token')
           .eq('user_id', session.user.id)
           .single();
         
-        // If there's no platform_secrets record or missing fields, redirect to onboarding
-        if (error || !platformSecrets || 
-            !platformSecrets.whatsapp_phone_id || 
-            !platformSecrets.whatsapp_verify_token || 
-            !platformSecrets.whatsapp_access_token) {
-          
+        // Only redirect if there's a clear problem with the required data
+        const needsOnboarding = error || 
+          !platformSecrets || 
+          (platformSecrets.whatsapp_phone_id === null || platformSecrets.whatsapp_phone_id === '') || 
+          (platformSecrets.whatsapp_verify_token === null || platformSecrets.whatsapp_verify_token === '') || 
+          (platformSecrets.whatsapp_access_token === null || platformSecrets.whatsapp_access_token === '');
+        
+        if (needsOnboarding) {
+          console.log("Dashboard: User needs onboarding, redirecting...");
           toast.info("Let's set up your WhatsApp integration", {
             description: "You need to configure WhatsApp to start using the platform",
             duration: 5000
@@ -72,6 +75,8 @@ const Dashboard = () => {
           
           navigate("/onboarding");
           return;
+        } else {
+          console.log("Dashboard: User already completed onboarding, staying on dashboard");
         }
       } catch (error) {
         console.error("Error checking onboarding status:", error);
