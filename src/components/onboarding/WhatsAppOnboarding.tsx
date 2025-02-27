@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,40 @@ export const WhatsAppOnboarding = () => {
   const [phoneId, setPhoneId] = useState("");
   const [verifyToken, setVerifyToken] = useState("");
   const [accessToken, setAccessToken] = useState("");
+
+  // Check if user has already completed onboarding when component mounts
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          navigate("/login");
+          return;
+        }
+        
+        const { data, error } = await supabase
+          .from('platform_secrets')
+          .select('whatsapp_phone_id, whatsapp_verify_token, whatsapp_access_token')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (!error && 
+            data && 
+            data.whatsapp_phone_id && 
+            data.whatsapp_verify_token && 
+            data.whatsapp_access_token) {
+          // User has already completed onboarding, redirect to dashboard
+          console.log("WhatsAppOnboarding: User has already completed onboarding");
+          navigate("/dashboard");
+        }
+      } catch (error) {
+        console.error("Error checking onboarding status:", error);
+      }
+    };
+    
+    checkOnboardingStatus();
+  }, [navigate]);
 
   const handleSaveConfiguration = async () => {
     try {
@@ -64,7 +98,8 @@ export const WhatsAppOnboarding = () => {
           user_id: session.user.id,
           whatsapp_phone_id: phoneId,
           whatsapp_verify_token: verifyToken,
-          whatsapp_access_token: accessToken
+          whatsapp_access_token: accessToken,
+          updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id'
         });
