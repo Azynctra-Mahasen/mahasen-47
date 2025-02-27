@@ -34,9 +34,10 @@ export const useMessageSending = (
         to: contactNumber,
         message: newMessage,
         type: "text",
-        useAI: false,
+        useAI: isAIEnabled,
         phoneId: secrets.whatsapp_phone_id,
-        accessToken: secrets.whatsapp_access_token
+        accessToken: secrets.whatsapp_access_token,
+        groqApiKey: secrets.groq_api_key // Add Groq API key
       };
 
       const { error: whatsappError } = await sendWhatsAppMessage(messagePayload);

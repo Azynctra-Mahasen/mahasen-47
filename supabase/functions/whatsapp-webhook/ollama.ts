@@ -1,6 +1,6 @@
 
 import { generateGroqSystemPrompt, generateGeminiIntentPrompt } from './prompts.ts';
-import { GroqHandler } from './services/model-handlers/groq-handler.ts';
+import { generateGroqResponse } from './services/model-handlers/groq-handler.ts';
 import { GeminiHandler } from './services/model-handlers/gemini-handler.ts';
 import { TicketHandler } from './services/ticket-handler.ts';
 import { searchKnowledgeBase, formatKnowledgeBaseContext } from './services/knowledge-base.ts';
@@ -31,11 +31,11 @@ export async function generateAIResponse(message: string, context: any, aiSettin
     };
 
     if (aiSettings.model_name === 'llama-3.3-70b-versatile') {
-      return await generateGroqResponse(message, updatedContext, aiSettings);
+      return await handleGroqResponse(message, updatedContext, aiSettings);
     } else if (aiSettings.model_name === 'gemini-2.0-flash-exp') {
-      return await generateGeminiResponse(message, updatedContext, aiSettings);
+      return await handleGeminiResponse(message, updatedContext, aiSettings);
     } else if (aiSettings.model_name === 'deepseek-r1-distill-llama-70b') {
-      return await generateGroqResponse(message, updatedContext, aiSettings);
+      return await handleGroqResponse(message, updatedContext, aiSettings);
     } else {
       throw new Error('Invalid model specified');
     }
@@ -45,7 +45,7 @@ export async function generateAIResponse(message: string, context: any, aiSettin
   }
 }
 
-async function generateGroqResponse(message: string, context: any, aiSettings: any): Promise<string> {
+async function handleGroqResponse(message: string, context: any, aiSettings: any): Promise<string> {
   const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
   if (!GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY is not set');
@@ -58,14 +58,30 @@ async function generateGroqResponse(message: string, context: any, aiSettings: a
   });
 
   try {
-    const parsedResponse = await GroqHandler.generateResponse(
-      message,
+    // Format messages for Groq
+    const messages = [
+      {
+        role: "user",
+        content: message
+      }
+    ];
+    
+    // Call the generateGroqResponse function from the imported module
+    const response = await generateGroqResponse(
+      messages,
       systemPrompt,
-      GROQ_API_KEY,
-      aiSettings.model_name
+      aiSettings.model_name || 'llama3-70b-8192',
+      0.7,
+      context.userId
     );
-
-    const ticketResponse = await TicketHandler.handleTicketCreation(parsedResponse, {
+    
+    const ticketResponse = await TicketHandler.handleTicketCreation({
+      response: response,
+      intent: {
+        type: "general",
+        confidence: 0.9
+      }
+    }, {
       messageId: context.messageId,
       conversationId: context.conversationId,
       userName: context.userName,
@@ -78,14 +94,14 @@ async function generateGroqResponse(message: string, context: any, aiSettings: a
       return ticketResponse;
     }
 
-    return parsedResponse.response;
+    return response;
   } catch (error) {
     console.error('Error getting Groq response:', error);
     throw error;
   }
 }
 
-async function generateGeminiResponse(message: string, context: any, aiSettings: any): Promise<string> {
+async function handleGeminiResponse(message: string, context: any, aiSettings: any): Promise<string> {
   const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY is not set');
