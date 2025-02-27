@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +10,10 @@ import { AIToneSelect } from "@/components/ai-settings/AIToneSelect";
 import { AIBehaviourInput } from "@/components/ai-settings/AIBehaviourInput";
 import { AdvancedSettings } from "@/components/ai-settings/AdvancedSettings";
 import { AISettingsActions } from "@/components/ai-settings/AISettingsActions";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Key } from "lucide-react";
 
 type AIModel = Database['public']['Enums']['ai_model'];
 
@@ -22,6 +27,7 @@ const AISettings = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState<AIModel>("deepseek-r1-distill-llama-70b");
   const [isModelChangeDisabled, setIsModelChangeDisabled] = useState(false);
+  const [groqApiKey, setGroqApiKey] = useState("");
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -32,25 +38,41 @@ const AISettings = () => {
           return;
         }
 
-        const { data, error } = await supabase
+        // Load AI settings
+        const { data: aiSettings, error: aiError } = await supabase
           .from('ai_settings')
           .select('*')
           .single();
 
-        if (error) {
-          console.error('Error loading AI settings:', error);
-          throw error;
+        if (aiError && aiError.code !== 'PGRST116') {
+          console.error('Error loading AI settings:', aiError);
+          throw aiError;
         }
 
-        if (data) {
-          setTone(data.tone as AITone);
-          setBehaviour(data.behaviour || "");
-          setContextMemoryLength(data.context_memory_length?.toString() || "2");
-          setConversationTimeout(data.conversation_timeout_hours || 1);
-          setModelName(data.model_name);
+        if (aiSettings) {
+          setTone(aiSettings.tone as AITone);
+          setBehaviour(aiSettings.behaviour || "");
+          setContextMemoryLength(aiSettings.context_memory_length?.toString() || "2");
+          setConversationTimeout(aiSettings.conversation_timeout_hours || 1);
+          setModelName(aiSettings.model_name);
+        }
+
+        // Load Groq API key
+        const { data: secretData, error: secretError } = await supabase
+          .from('decrypted_user_secrets')
+          .select('secret_value')
+          .eq('secret_type', 'groq_api_key')
+          .single();
+
+        if (secretError && secretError.code !== 'PGRST116') {
+          console.error('Error loading Groq API key:', secretError);
+        }
+
+        if (secretData) {
+          setGroqApiKey(secretData.secret_value || "");
         }
       } catch (error) {
-        console.error('Error loading AI settings:', error);
+        console.error('Error loading settings:', error);
         toast({
           variant: "destructive",
           title: "Error",
@@ -82,7 +104,8 @@ const AISettings = () => {
         throw new Error("Conversation timeout must be between 1 and 6 hours");
       }
 
-      const { error } = await supabase
+      // Save AI settings
+      const { error: aiError } = await supabase
         .from('ai_settings')
         .upsert({ 
           id: 1,
@@ -94,7 +117,24 @@ const AISettings = () => {
           updated_at: new Date().toISOString()
         });
 
-      if (error) throw error;
+      if (aiError) throw aiError;
+
+      // Save Groq API key if provided
+      if (groqApiKey) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error("No active session");
+        }
+
+        const { error: groqKeyError } = await supabase
+          .rpc('store_user_secret', {
+            p_user_id: session.user.id,
+            p_secret_type: 'groq_api_key',
+            p_secret_value: groqApiKey
+          });
+
+        if (groqKeyError) throw groqKeyError;
+      }
 
       toast({
         title: "Settings saved",
@@ -130,6 +170,26 @@ const AISettings = () => {
             onModelChange={handleModelChange}
             isModelChangeDisabled={isModelChangeDisabled}
           />
+
+          <Card className="border-gray-300">
+            <CardContent className="p-4">
+              <Label htmlFor="groq_api_key" className="text-sm font-medium">Groq API Key</Label>
+              <div className="relative mt-1">
+                <Key className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="groq_api_key"
+                  type="password"
+                  value={groqApiKey}
+                  onChange={(e) => setGroqApiKey(e.target.value)}
+                  className="pl-10 border-gray-300"
+                  placeholder="Enter your Groq API Key for AI responses"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                The Groq API key will be used for generating AI responses in WhatsApp conversations
+              </p>
+            </CardContent>
+          </Card>
 
           <AISettingsActions onSave={handleSave} isLoading={isLoading} />
         </div>

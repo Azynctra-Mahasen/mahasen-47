@@ -9,11 +9,13 @@ interface SecretsSectionProps {
     whatsapp_phone_id: string;
     whatsapp_verify_token: string;
     whatsapp_access_token: string;
+    groq_api_key: string;
   };
   onSecretsChange: (secrets: {
     whatsapp_phone_id: string;
     whatsapp_verify_token: string;
     whatsapp_access_token: string;
+    groq_api_key: string;
   }) => void;
 }
 
@@ -23,7 +25,7 @@ export const SecretsSection = ({ secrets, onSecretsChange }: SecretsSectionProps
       <CardHeader className="border-b border-red-200">
         <CardTitle className="text-red-500">Platform Secrets</CardTitle>
         <CardDescription className="text-red-400">
-          Manage your WhatsApp integration secrets
+          Manage your WhatsApp integration secrets and AI API keys
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -69,6 +71,21 @@ export const SecretsSection = ({ secrets, onSecretsChange }: SecretsSectionProps
                 onChange={(e) => onSecretsChange({ ...secrets, whatsapp_access_token: e.target.value })}
                 className="pl-10 border-red-200 focus-visible:ring-red-500"
                 placeholder="Enter WhatsApp Access Token"
+              />
+            </div>
+          </div>
+          
+          <div>
+            <Label htmlFor="groq_api_key" className="text-red-500">Groq API Key</Label>
+            <div className="relative mt-1">
+              <Key className="absolute left-3 top-3 h-4 w-4 text-red-400" />
+              <Input
+                id="groq_api_key"
+                type="password"
+                value={secrets.groq_api_key || ""}
+                onChange={(e) => onSecretsChange({ ...secrets, groq_api_key: e.target.value })}
+                className="pl-10 border-red-200 focus-visible:ring-red-500"
+                placeholder="Enter your Groq API Key"
               />
             </div>
           </div>
