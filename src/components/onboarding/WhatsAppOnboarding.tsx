@@ -41,8 +41,11 @@ export const WhatsAppOnboarding = () => {
         if (!error && 
             data && 
             data.whatsapp_phone_id && 
+            data.whatsapp_phone_id.trim() !== '' &&
             data.whatsapp_verify_token && 
-            data.whatsapp_access_token) {
+            data.whatsapp_verify_token.trim() !== '' &&
+            data.whatsapp_access_token && 
+            data.whatsapp_access_token.trim() !== '') {
           // User has already completed onboarding, redirect to dashboard
           console.log("WhatsAppOnboarding: User has already completed onboarding");
           navigate("/dashboard");
@@ -154,13 +157,20 @@ export const WhatsAppOnboarding = () => {
                 </div>
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col space-y-4">
               <Button 
                 className="ml-auto" 
                 onClick={() => setCurrentStep("whatsapp-number")}
               >
                 Get Started <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
+              <div className="w-full flex justify-center mt-4">
+                <img 
+                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
+                  alt="Mahasen AI - AI for People" 
+                  className="h-10 mt-4" 
+                />
+              </div>
             </CardFooter>
           </Card>
         );
@@ -195,19 +205,28 @@ export const WhatsAppOnboarding = () => {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentStep("welcome")}
-              >
-                Back
-              </Button>
-              <Button 
-                onClick={() => setCurrentStep("whatsapp-config")}
-                disabled={!whatsappNumber}
-              >
-                Next <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+            <CardFooter className="flex flex-col space-y-4">
+              <div className="w-full flex justify-between">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setCurrentStep("welcome")}
+                >
+                  Back
+                </Button>
+                <Button 
+                  onClick={() => setCurrentStep("whatsapp-config")}
+                  disabled={!whatsappNumber}
+                >
+                  Next <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+              <div className="w-full flex justify-center mt-4">
+                <img 
+                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
+                  alt="Mahasen AI - AI for People" 
+                  className="h-10 mt-4" 
+                />
+              </div>
             </CardFooter>
           </Card>
         );
@@ -284,19 +303,28 @@ export const WhatsAppOnboarding = () => {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentStep("whatsapp-number")}
-              >
-                Back
-              </Button>
-              <Button 
-                onClick={handleSaveConfiguration}
-                disabled={!phoneId || !verifyToken || !accessToken || loading}
-              >
-                {loading ? "Saving..." : "Save Configuration"}
-              </Button>
+            <CardFooter className="flex flex-col space-y-4">
+              <div className="w-full flex justify-between">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setCurrentStep("whatsapp-number")}
+                >
+                  Back
+                </Button>
+                <Button 
+                  onClick={handleSaveConfiguration}
+                  disabled={!phoneId || !verifyToken || !accessToken || loading}
+                >
+                  {loading ? "Saving..." : "Save Configuration"}
+                </Button>
+              </div>
+              <div className="w-full flex justify-center mt-4">
+                <img 
+                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
+                  alt="Mahasen AI - AI for People" 
+                  className="h-10 mt-4" 
+                />
+              </div>
             </CardFooter>
           </Card>
         );
@@ -337,19 +365,28 @@ export const WhatsAppOnboarding = () => {
                 </ul>
               </div>
             </CardContent>
-            <CardFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => navigate("/dashboard")}
-                className="mr-2"
-              >
-                Go to Dashboard
-              </Button>
-              <Button 
-                onClick={() => navigate("/chats/whatsapp")}
-              >
-                View WhatsApp Chats
-              </Button>
+            <CardFooter className="flex flex-col space-y-4">
+              <div className="w-full flex justify-between">
+                <Button 
+                  variant="outline" 
+                  onClick={() => navigate("/dashboard")}
+                  className="mr-2"
+                >
+                  Go to Dashboard
+                </Button>
+                <Button 
+                  onClick={() => navigate("/chats/whatsapp")}
+                >
+                  View WhatsApp Chats
+                </Button>
+              </div>
+              <div className="w-full flex justify-center mt-4">
+                <img 
+                  src="/lovable-uploads/85667a74-2830-416a-920e-420ec23cc266.png" 
+                  alt="Mahasen AI - AI for People" 
+                  className="h-10 mt-4" 
+                />
+              </div>
             </CardFooter>
           </Card>
         );

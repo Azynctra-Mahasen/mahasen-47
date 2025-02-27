@@ -42,6 +42,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Skip onboarding check - let users stay on the dashboard regardless of their configuration
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -50,39 +51,7 @@ const Dashboard = () => {
       }
       
       setUserName(session.user.email?.split('@')[0] || "User");
-      
-      try {
-        // Check if onboarding is needed - only redirects on strict conditions
-        const { data: platformSecrets, error } = await supabase
-          .from('platform_secrets')
-          .select('whatsapp_phone_id, whatsapp_verify_token, whatsapp_access_token')
-          .eq('user_id', session.user.id)
-          .single();
-        
-        // Only redirect if there's a clear problem with the required data
-        const needsOnboarding = error || 
-          !platformSecrets || 
-          (platformSecrets.whatsapp_phone_id === null || platformSecrets.whatsapp_phone_id === '') || 
-          (platformSecrets.whatsapp_verify_token === null || platformSecrets.whatsapp_verify_token === '') || 
-          (platformSecrets.whatsapp_access_token === null || platformSecrets.whatsapp_access_token === '');
-        
-        if (needsOnboarding) {
-          console.log("Dashboard: User needs onboarding, redirecting...");
-          toast.info("Let's set up your WhatsApp integration", {
-            description: "You need to configure WhatsApp to start using the platform",
-            duration: 5000
-          });
-          
-          navigate("/onboarding");
-          return;
-        } else {
-          console.log("Dashboard: User already completed onboarding, staying on dashboard");
-        }
-      } catch (error) {
-        console.error("Error checking onboarding status:", error);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(false);
     };
 
     checkAuth();

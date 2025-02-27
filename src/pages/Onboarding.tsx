@@ -37,8 +37,11 @@ const Onboarding = () => {
         if (!secretsError && 
             platformSecrets && 
             platformSecrets.whatsapp_phone_id && 
+            platformSecrets.whatsapp_phone_id.trim() !== '' &&
             platformSecrets.whatsapp_verify_token && 
-            platformSecrets.whatsapp_access_token) {
+            platformSecrets.whatsapp_verify_token.trim() !== '' &&
+            platformSecrets.whatsapp_access_token && 
+            platformSecrets.whatsapp_access_token.trim() !== '') {
           // User has already configured WhatsApp, redirect to dashboard
           console.log("User has already completed onboarding, redirecting to dashboard");
           navigate("/dashboard");
