@@ -21,29 +21,44 @@ export async function getUserByPhoneId(phoneNumberId: string): Promise<UserConte
   try {
     console.log(`Looking up user for WhatsApp phone ID: ${phoneNumberId}`);
     
-    // Find the platform_secrets entry with this phone ID
+    // Get all secrets that match this phone ID
     const { data: secretsData, error: secretsError } = await supabase
       .from('platform_secrets')
       .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token')
-      .eq('whatsapp_phone_id', phoneNumberId)
-      .single();
+      .eq('whatsapp_phone_id', phoneNumberId);
     
     if (secretsError) {
       console.error('Error fetching platform secrets:', secretsError);
       return null;
     }
     
-    if (!secretsData) {
+    if (!secretsData || secretsData.length === 0) {
       console.error('No user found with the given WhatsApp phone ID');
       return null;
     }
     
-    // Create user context
+    // Take the most recently updated user if there are multiple matches
+    // Sort the records by updated_at in descending order (most recent first)
+    const { data: sortedData, error: sortError } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token, updated_at')
+      .eq('whatsapp_phone_id', phoneNumberId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+      
+    if (sortError || !sortedData || sortedData.length === 0) {
+      console.error('Error getting the most recent platform secret:', sortError);
+      return null;
+    }
+    
+    const mostRecentRecord = sortedData[0];
+    
+    // Create user context from the most recent record
     const userContext: UserContext = {
-      userId: secretsData.user_id,
-      whatsappPhoneId: secretsData.whatsapp_phone_id,
-      whatsappAccessToken: secretsData.whatsapp_access_token || '',
-      whatsappVerifyToken: secretsData.whatsapp_verify_token || '',
+      userId: mostRecentRecord.user_id,
+      whatsappPhoneId: mostRecentRecord.whatsapp_phone_id || '',
+      whatsappAccessToken: mostRecentRecord.whatsapp_access_token || '',
+      whatsappVerifyToken: mostRecentRecord.whatsapp_verify_token || '',
     };
     
     console.log(`Found user: ${userContext.userId} for WhatsApp phone ID: ${phoneNumberId}`);
