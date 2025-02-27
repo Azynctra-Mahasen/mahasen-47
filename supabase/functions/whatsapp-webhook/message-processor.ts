@@ -112,27 +112,52 @@ async function findOrCreateConversation(
   userId: string, 
   userName: string
 ): Promise<string> {
-  const { data: conversation } = await supabase
+  console.log('Looking for existing conversation');
+  
+  // Check if conversation exists
+  const { data: conversations, error: conversationError } = await supabase
     .from('conversations')
     .select('id')
-    .eq('user_id', userId)
-    .eq('name', userName)
-    .single();
+    .eq('contact_number', userId);
 
-  if (conversation) {
-    return conversation.id;
-  } else {
-    const { data: newConversation } = await supabase
+  if (conversationError) {
+    console.error('Error checking for existing conversation:', conversationError);
+    throw conversationError;
+  }
+
+  // If conversation exists, return its ID
+  if (conversations && conversations.length > 0) {
+    console.log('Found existing conversation:', conversations[0].id);
+    return conversations[0].id;
+  }
+
+  // Otherwise create a new conversation
+  console.log('Creating new conversation for:', userName);
+  try {
+    const { data: newConversation, error: createError } = await supabase
       .from('conversations')
       .insert({
-        user_id: userId,
-        name: userName,
-        platform: 'whatsapp'
+        contact_name: userName,
+        contact_number: userId,
+        platform: 'whatsapp',
+        ai_enabled: true
       })
-      .select('id')
-      .single();
+      .select();
 
-    return newConversation.id;
+    if (createError) {
+      console.error('Error creating conversation:', createError);
+      throw createError;
+    }
+
+    if (!newConversation || newConversation.length === 0) {
+      throw new Error('Failed to create conversation: No data returned');
+    }
+
+    console.log('Created new conversation:', newConversation[0].id);
+    return newConversation[0].id;
+  } catch (error) {
+    console.error('Error in conversation creation:', error);
+    throw error;
   }
 }
 
@@ -143,13 +168,23 @@ async function storeMessage(
   senderNumber: string,
   senderName: string
 ): Promise<void> {
-  await supabase
+  console.log(`Storing message in conversation ${conversationId}`);
+  
+  const { error } = await supabase
     .from('messages')
     .insert({
       conversation_id: conversationId,
-      content: content,
+      content,
+      status: 'received',
+      sender_name: senderName,
       sender_number: senderNumber,
-      sender_name: senderName
-    })
-    .select();
+      read: false
+    });
+
+  if (error) {
+    console.error('Error storing message:', error);
+    throw error;
+  }
+  
+  console.log('Message stored successfully');
 }
