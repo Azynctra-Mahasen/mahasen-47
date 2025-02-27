@@ -2,31 +2,16 @@
 // Follow this setup guide to integrate the Deno standard library
 // https://deno.land/manual/examples/module_metadata#module-metadata
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
+import { 
+  authenticateWebhookUser, 
+  extractPhoneNumberId,
+  getUserByPhoneId
+} from "./auth-handler.ts";
 
 // Define CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-interface UserContext {
-  userId: string;
-  whatsappPhoneId: string;
-  whatsappAccessToken: string;
-  whatsappVerifyToken: string;
-}
-
-export const corsResponse = () => {
-  return new Response(null, {
-    status: 204,
-    headers: corsHeaders,
-  });
 };
 
 export const errorResponse = (message: string, status = 400) => {
@@ -44,88 +29,10 @@ export const errorResponse = (message: string, status = 400) => {
   );
 };
 
-/**
- * Get user by their WhatsApp phone ID - handles multiple matching records
- */
-async function getUserByPhoneId(phoneNumberId: string): Promise<UserContext | null> {
-  try {
-    console.log(`Looking up user for WhatsApp phone ID: ${phoneNumberId}`);
-    
-    // Important: DO NOT use .single() here as it causes PGRST116 when multiple rows are returned
-    // Instead use .select() with .order() and limit to get the most recent user
-    const { data, error } = await supabase
-      .from('platform_secrets')
-      .select('*')  // Select all columns
-      .eq('whatsapp_phone_id', phoneNumberId)
-      .order('updated_at', { ascending: false })
-      .limit(1);
-    
-    if (error) {
-      console.error('Error fetching platform secrets:', error);
-      return null;
-    }
-    
-    if (!data || data.length === 0) {
-      console.error('No user found with the given WhatsApp phone ID');
-      return null;
-    }
-    
-    // Take the first record which is the most recently updated one
-    const mostRecentRecord = data[0];
-    console.log(`Found ${data.length} matching record(s), using most recent for user: ${mostRecentRecord.user_id}`);
-    
-    const userContext: UserContext = {
-      userId: mostRecentRecord.user_id,
-      whatsappPhoneId: mostRecentRecord.whatsapp_phone_id || '',
-      whatsappAccessToken: mostRecentRecord.whatsapp_access_token || '',
-      whatsappVerifyToken: mostRecentRecord.whatsapp_verify_token || '',
-    };
-    
-    return userContext;
-  } catch (error) {
-    console.error('Error in getUserByPhoneId:', error);
-    return null;
-  }
-}
-
-/**
- * Extract the WhatsApp phone number ID from the webhook payload
- */
-function extractPhoneNumberId(payload: any): string | null {
-  try {
-    const phoneNumberId = payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
-    
-    if (!phoneNumberId) {
-      console.error('Could not extract phone_number_id from payload:', JSON.stringify(payload));
-      return null;
-    }
-    
-    console.log(`Extracted phone_number_id: ${phoneNumberId}`);
-    return phoneNumberId;
-  } catch (error) {
-    console.error('Error extracting phone_number_id:', error);
-    return null;
-  }
-}
-
-/**
- * Authenticate the user based on WhatsApp webhook payload
- */
-async function authenticateWebhookUser(payload: any): Promise<UserContext | null> {
-  const phoneNumberId = extractPhoneNumberId(payload);
-  
-  if (!phoneNumberId) {
-    console.error('Could not extract phone number ID from payload');
-    return null;
-  }
-  
-  return await getUserByPhoneId(phoneNumberId);
-}
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -193,11 +100,13 @@ serve(async (req) => {
       
       console.log(`Processing webhook for user: ${userContext.userId}`);
       
-      // Here you would process the message and send a response
-      // This is where you'd implement the actual message handling logic
-      
+      // Here is where you would implement the actual message handling logic
+      // Return a simple success response for now
       return new Response(
-        JSON.stringify({ success: true, userId: userContext.userId }),
+        JSON.stringify({ 
+          success: true, 
+          userId: userContext.userId
+        }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
@@ -207,7 +116,7 @@ serve(async (req) => {
     // Return method not allowed for other HTTP methods
     return errorResponse('Method not allowed', 405);
   } catch (error) {
-    console.error('Error processing webhook:', error.message);
+    console.error('Error processing webhook:', error);
     return errorResponse(`Internal Server Error: ${error.message}`, 500);
   }
 });
