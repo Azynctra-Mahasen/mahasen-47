@@ -371,9 +371,14 @@ export const WhatsAppOnboarding = () => {
       </div>
       <div className="w-full flex justify-center mt-auto fixed bottom-12 left-0">
         <img 
-          src="../src/uploads/onboarding_footer.png" 
+          src="../src/uploads/onboarding_footer_light.png" 
           alt="Mahasen AI - AI for People" 
-          className="h-10" 
+          className="h-10 dark:hidden" 
+        />
+        <img 
+          src="../src/uploads/onboarding_footer_dark.png" 
+          alt="Mahasen AI - AI for People" 
+          className="h-10 hidden dark:block" 
         />
       </div>
     </div>
