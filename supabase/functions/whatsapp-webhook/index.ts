@@ -51,12 +51,14 @@ async function getUserByPhoneId(phoneNumberId: string): Promise<UserContext | nu
   try {
     console.log(`Looking up user for WhatsApp phone ID: ${phoneNumberId}`);
     
-    // Instead of using .single(), get all matching records and sort by updated_at
+    // Important: DO NOT use .single() here as it causes PGRST116 when multiple rows are returned
+    // Instead use .select() with .order() and limit to get the most recent user
     const { data, error } = await supabase
       .from('platform_secrets')
-      .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token, updated_at')
+      .select('*')  // Select all columns
       .eq('whatsapp_phone_id', phoneNumberId)
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: false })
+      .limit(1);
     
     if (error) {
       console.error('Error fetching platform secrets:', error);
@@ -68,9 +70,9 @@ async function getUserByPhoneId(phoneNumberId: string): Promise<UserContext | nu
       return null;
     }
     
-    // Take the most recently updated record
+    // Take the first record which is the most recently updated one
     const mostRecentRecord = data[0];
-    console.log(`Found ${data.length} matching records, using most recent: ${mostRecentRecord.user_id}`);
+    console.log(`Found ${data.length} matching record(s), using most recent for user: ${mostRecentRecord.user_id}`);
     
     const userContext: UserContext = {
       userId: mostRecentRecord.user_id,
@@ -98,6 +100,7 @@ function extractPhoneNumberId(payload: any): string | null {
       return null;
     }
     
+    console.log(`Extracted phone_number_id: ${phoneNumberId}`);
     return phoneNumberId;
   } catch (error) {
     console.error('Error extracting phone_number_id:', error);
@@ -120,7 +123,7 @@ async function authenticateWebhookUser(payload: any): Promise<UserContext | null
 }
 
 serve(async (req) => {
-  // This is needed if you're planning to invoke your function from a browser.
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -171,21 +174,28 @@ serve(async (req) => {
     
     // Handle POST requests for incoming messages
     if (req.method === 'POST') {
-      const payload = await req.json();
-      console.log('WhatsApp API payload:', JSON.stringify(payload));
+      let payload;
+      try {
+        payload = await req.json();
+        console.log('WhatsApp API payload:', JSON.stringify(payload));
+      } catch (error) {
+        console.error('Error parsing request body:', error);
+        return errorResponse('Invalid request body', 400);
+      }
       
       // Authenticate the user based on the message payload
       const userContext = await authenticateWebhookUser(payload);
       
       if (!userContext) {
         console.error('Failed to authenticate webhook user');
-        return errorResponse('Unauthorized', 401);
+        return errorResponse('Failed to authenticate webhook user', 401);
       }
       
       console.log(`Processing webhook for user: ${userContext.userId}`);
       
       // Here you would process the message and send a response
-      // For now, just return success
+      // This is where you'd implement the actual message handling logic
+      
       return new Response(
         JSON.stringify({ success: true, userId: userContext.userId }),
         {
