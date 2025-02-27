@@ -10,6 +10,7 @@ type UserSecrets = {
   whatsapp_phone_id: string;
   whatsapp_verify_token: string;
   whatsapp_access_token: string;
+  groq_api_key?: string;
 };
 
 export const useProfile = () => {
@@ -22,7 +23,8 @@ export const useProfile = () => {
   const [secrets, setSecrets] = useState<UserSecrets>({
     whatsapp_phone_id: "",
     whatsapp_verify_token: "",
-    whatsapp_access_token: ""
+    whatsapp_access_token: "",
+    groq_api_key: ""
   });
 
   useEffect(() => {
@@ -92,8 +94,28 @@ export const useProfile = () => {
           setSecrets({
             whatsapp_phone_id: secretsMap.whatsapp_phone_id ?? "",
             whatsapp_verify_token: secretsMap.whatsapp_verify_token ?? "",
-            whatsapp_access_token: secretsMap.whatsapp_access_token ?? ""
+            whatsapp_access_token: secretsMap.whatsapp_access_token ?? "",
+            groq_api_key: secretsMap.groq_api_key ?? ""
           });
+        }
+
+        // Create platform_secrets entry if it doesn't exist
+        const { data: platformSecrets, error: platformSecretsError } = await supabase
+          .from('platform_secrets')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (platformSecretsError && platformSecretsError.code === 'PGRST116') {
+          // No platform_secrets found, create one
+          await supabase
+            .from('platform_secrets')
+            .insert({
+              user_id: session.user.id,
+              whatsapp_phone_id: secretsMap?.whatsapp_phone_id || "",
+              whatsapp_verify_token: secretsMap?.whatsapp_verify_token || "",
+              whatsapp_access_token: secretsMap?.whatsapp_access_token || ""
+            });
         }
       } catch (error) {
         console.error('Error in getProfile:', error);
