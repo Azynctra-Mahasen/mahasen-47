@@ -48,9 +48,6 @@ jwt_expiry = 3600
 # Allow/disallow new user signups to your project.
 enable_signup = true
 
-# Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
-# `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `twitch`,
-# `twitter`, `slack`, `spotify`, `workos`, `zoom`.
 [auth.external.apple]
 enabled = false
 client_id = ""
@@ -186,3 +183,6 @@ enabled = true
 [functions]
 # Define which folder contains the functions.
 path = "functions"
+# IMPORTANT: Disable JWT verification for the whatsapp-webhook function
+[[functions.http.whatsapp-webhook]]
+verify_jwt = false
