@@ -6,6 +6,7 @@ import { MessageSquare, Facebook, Instagram, FileText, Network, Ticket } from "l
 import { PlatformCard } from "@/components/dashboard/PlatformCard";
 import { UtilityCard } from "@/components/dashboard/UtilityCard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { toast } from "sonner";
 
 const platforms = [
   {
@@ -38,15 +39,19 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Skip onboarding check - let users stay on the dashboard regardless of their configuration
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/login");
-      } else {
-        setUserName(session.user.email?.split('@')[0] || "User");
+        return;
       }
+      
+      setUserName(session.user.email?.split('@')[0] || "User");
+      setLoading(false);
     };
 
     checkAuth();
@@ -71,6 +76,14 @@ const Dashboard = () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">

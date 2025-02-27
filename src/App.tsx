@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,6 +22,7 @@ import Tickets from "./pages/Tickets";
 import CompletedTickets from "./pages/CompletedTickets";
 import Pricing from "./pages/Pricing";
 import Settings from "./pages/Settings";
+import Onboarding from "./pages/Onboarding";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -164,6 +166,16 @@ const App = () => {
                 element={
                   isAuthenticated ? (
                     <Dashboard />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
+                }
+              />
+              <Route
+                path="/onboarding"
+                element={
+                  isAuthenticated ? (
+                    <Onboarding />
                   ) : (
                     <Navigate to="/login" replace />
                   )
