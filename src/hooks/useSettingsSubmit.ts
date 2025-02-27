@@ -1,6 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 
 type UserSecrets = {
   whatsapp_phone_id: string;
@@ -9,6 +9,8 @@ type UserSecrets = {
 };
 
 export const useSettingsSubmit = () => {
+  const { toast } = useToast();
+
   const handleSave = async (
     setLoading: (loading: boolean) => void,
     username: string,
@@ -16,10 +18,6 @@ export const useSettingsSubmit = () => {
     secrets: UserSecrets
   ) => {
     try {
-      if (!secrets.whatsapp_phone_id || !secrets.whatsapp_verify_token || !secrets.whatsapp_access_token) {
-        throw new Error("All WhatsApp configuration fields are required");
-      }
-
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -27,7 +25,6 @@ export const useSettingsSubmit = () => {
         throw new Error("No active session");
       }
 
-      // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
@@ -41,7 +38,6 @@ export const useSettingsSubmit = () => {
         throw profileError;
       }
 
-      // Save WhatsApp secrets
       const { error: phoneIdError } = await supabase
         .rpc('store_user_secret', {
           p_user_id: session.user.id,
@@ -69,15 +65,16 @@ export const useSettingsSubmit = () => {
 
       if (accessTokenError) throw accessTokenError;
 
-      toast.success("Settings and WhatsApp configuration saved successfully");
-
-      // Add a small delay to ensure all data is saved
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
+      toast({
+        title: "Success",
+        description: "Settings and secrets saved successfully",
+      });
     } catch (error) {
       console.error('Error saving settings:', error);
-      toast.error("Failed to save settings", {
-        description: error instanceof Error ? error.message : "Unknown error occurred"
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save settings",
       });
     } finally {
       setLoading(false);
