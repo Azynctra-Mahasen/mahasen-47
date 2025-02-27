@@ -6,7 +6,6 @@ type UserSecrets = {
   whatsapp_phone_id: string;
   whatsapp_verify_token: string;
   whatsapp_access_token: string;
-  groq_api_key: string;
 };
 
 export const useSettingsSubmit = () => {
@@ -65,18 +64,6 @@ export const useSettingsSubmit = () => {
         });
 
       if (accessTokenError) throw accessTokenError;
-      
-      // Save Groq API Key
-      if (secrets.groq_api_key) {
-        const { error: groqKeyError } = await supabase
-          .rpc('store_user_secret', {
-            p_user_id: session.user.id,
-            p_secret_type: 'groq_api_key',
-            p_secret_value: secrets.groq_api_key
-          });
-
-        if (groqKeyError) throw groqKeyError;
-      }
 
       toast({
         title: "Success",
