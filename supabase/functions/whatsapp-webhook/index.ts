@@ -80,6 +80,9 @@ async function getVerifyToken(phoneNumberId: string): Promise<string | null> {
 }
 
 serve(async (req) => {
+  // Log all incoming requests for debugging
+  console.log(`Webhook request received: ${req.method} ${req.url}`);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
