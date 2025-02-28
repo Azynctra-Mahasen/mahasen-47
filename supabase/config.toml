@@ -181,8 +181,10 @@ enabled = true
 
 # Set up Edge Functions
 [functions]
-# Define which folder contains the functions.
 path = "functions"
-# IMPORTANT: Disable JWT verification for the whatsapp-webhook function
-[[functions.http.whatsapp-webhook]]
+
+[[functions.import_map]]
+path = "functions/import_map.json"
+
+[functions.http."whatsapp-webhook"]
 verify_jwt = false
