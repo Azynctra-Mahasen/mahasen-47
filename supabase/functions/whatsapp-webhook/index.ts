@@ -42,6 +42,7 @@ function extractPhoneNumberId(payload: any): string | null {
       return null;
     }
     
+    console.log('Extracted phone_number_id:', phoneNumberId);
     return phoneNumberId;
   } catch (error) {
     console.error('Error extracting phone_number_id:', error);
@@ -76,6 +77,51 @@ async function getVerifyToken(phoneNumberId: string): Promise<string | null> {
   } catch (error) {
     console.error('Error in getVerifyToken:', error);
     return null;
+  }
+}
+
+/**
+ * Get the user associated with a WhatsApp phone ID
+ */
+async function getUserByPhoneId(phoneNumberId: string) {
+  try {
+    console.log('Looking up user for WhatsApp phone ID:', phoneNumberId);
+    
+    // Debug: Check all platform_secrets records
+    const { data: allSecrets, error: listError } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_phone_id')
+      .order('updated_at', { ascending: false });
+      
+    if (listError) {
+      console.error('Error listing all platform secrets:', listError);
+    } else {
+      console.log('All platform_secrets records:', JSON.stringify(allSecrets));
+    }
+    
+    // Now try to get the specific user
+    const { data: userData, error: userError } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_access_token')
+      .eq('whatsapp_phone_id', phoneNumberId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    
+    if (userError) {
+      console.error('Error fetching user data:', userError);
+      return { error: userError, data: null };
+    }
+    
+    if (!userData || userData.length === 0) {
+      console.error('No user found with the given WhatsApp phone ID:', phoneNumberId);
+      return { error: new Error('User not found'), data: null };
+    }
+    
+    console.log('Found user:', userData[0].user_id, 'for WhatsApp phone ID:', phoneNumberId);
+    return { error: null, data: userData[0] };
+  } catch (error) {
+    console.error('Error in getUserByPhoneId:', error);
+    return { error, data: null };
   }
 }
 
@@ -161,22 +207,46 @@ serve(async (req) => {
         console.error('Failed to extract phone_number_id from payload');
         return errorResponse('Missing phone_number_id in request payload', 400);
       }
-      
-      // Get the user associated with this phone ID
-      const { data: userData, error: userError } = await supabase
+
+      // Try a more flexible approach to find the user
+      const { data: allUsers, error: usersError } = await supabase
         .from('platform_secrets')
-        .select('user_id, whatsapp_access_token')
-        .eq('whatsapp_phone_id', phoneNumberId)
-        .order('updated_at', { ascending: false })
-        .limit(1);
+        .select('user_id, whatsapp_phone_id')
+        .order('updated_at', { ascending: false });
+
+      if (usersError) {
+        console.error('Error fetching all platform secrets:', usersError);
+        return errorResponse(`Database error: ${usersError.message}`, 500);
+      }
+
+      console.log('All platform_secrets:', JSON.stringify(allUsers));
       
-      if (userError || !userData || userData.length === 0) {
-        console.error('No user found for the given phone_number_id');
+      // First try exact match
+      let userData = allUsers.find(user => user.whatsapp_phone_id === phoneNumberId);
+      
+      // If no exact match, try a loose match (in case of formatting differences)
+      if (!userData) {
+        userData = allUsers.find(user => 
+          user.whatsapp_phone_id && phoneNumberId && 
+          user.whatsapp_phone_id.toString().trim() === phoneNumberId.toString().trim()
+        );
+      }
+      
+      // If still no match, check if any whatsapp_phone_id contains the phoneNumberId
+      if (!userData) {
+        userData = allUsers.find(user => 
+          user.whatsapp_phone_id && phoneNumberId && 
+          user.whatsapp_phone_id.toString().includes(phoneNumberId.toString())
+        );
+      }
+      
+      if (!userData) {
+        console.error('No user found for the given phone_number_id after flexible search:', phoneNumberId);
         return errorResponse('User not found', 404);
       }
       
-      const userId = userData[0].user_id;
-      console.log(`Processing webhook for user: ${userId}`);
+      const userId = userData.user_id;
+      console.log(`Processing webhook for user: ${userId} with phone_id: ${phoneNumberId}`);
       
       // Here you would implement message handling logic
       
