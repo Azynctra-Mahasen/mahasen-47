@@ -181,13 +181,3 @@ enabled = true
 
 # Set up Edge Functions
 [functions]
-# Folder containing your functions
-path = "supabase/functions"
-
-# Import map
-import_map = "./functions/import_map.json"
-
-# Function-specific configurations
-[[functions.http]]
-function_name = "whatsapp-webhook"
-verify_jwt = false
