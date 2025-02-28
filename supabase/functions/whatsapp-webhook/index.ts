@@ -125,6 +125,163 @@ async function getUserByPhoneId(phoneNumberId: string) {
   }
 }
 
+/**
+ * Store a message in the database
+ */
+async function storeMessage(userId: string, conversationId: string, senderName: string, senderNumber: string, content: string, whatsappMessageId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        user_id: userId,
+        conversation_id: conversationId,
+        sender_name: senderName,
+        sender_number: senderNumber,
+        content: content,
+        status: 'received',
+        whatsapp_message_id: whatsappMessageId
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error storing message:', error);
+      return { error };
+    }
+    
+    console.log('Message stored successfully:', data.id);
+    return { data };
+  } catch (error) {
+    console.error('Error in storeMessage:', error);
+    return { error };
+  }
+}
+
+/**
+ * Get or create a conversation for a contact
+ */
+async function getOrCreateConversation(userId: string, contactName: string, contactNumber: string) {
+  try {
+    // Check if conversation exists
+    const { data: existingConversation } = await supabase
+      .from('conversations')
+      .select('id, ai_enabled')
+      .eq('user_id', userId)
+      .eq('contact_number', contactNumber)
+      .single();
+    
+    if (existingConversation) {
+      console.log('Found existing conversation:', existingConversation.id);
+      return { data: existingConversation, isNew: false };
+    }
+    
+    // Create new conversation
+    const { data: newConversation, error } = await supabase
+      .from('conversations')
+      .insert({
+        user_id: userId,
+        contact_name: contactName,
+        contact_number: contactNumber,
+        platform: 'whatsapp',
+        ai_enabled: true, // Default to AI enabled
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error creating conversation:', error);
+      return { error };
+    }
+    
+    console.log('Created new conversation:', newConversation.id);
+    return { data: newConversation, isNew: true };
+  } catch (error) {
+    console.error('Error in getOrCreateConversation:', error);
+    return { error };
+  }
+}
+
+/**
+ * Extract text content from a WhatsApp message
+ */
+function extractMessageContent(message: any): string {
+  // If it's a text message, return the body
+  if (message.type === 'text' && message.text && message.text.body) {
+    return message.text.body;
+  }
+  
+  // Handle other message types
+  switch (message.type) {
+    case 'image':
+      return '[Image message]';
+    case 'audio':
+      return '[Audio message]';
+    case 'video':
+      return '[Video message]';
+    case 'document':
+      return '[Document message]';
+    case 'location':
+      return '[Location message]';
+    case 'contacts':
+      return '[Contacts message]';
+    case 'button':
+      return message.button?.text || '[Button message]';
+    case 'interactive':
+      return message.interactive?.button_reply?.title || '[Interactive message]';
+    default:
+      return '[Unsupported message type]';
+  }
+}
+
+/**
+ * Process a WhatsApp message
+ */
+async function processWhatsAppMessage(message: any, contact: any, userId: string) {
+  try {
+    const contactName = contact?.profile?.name || 'Unknown';
+    const contactNumber = message.from;
+    const messageContent = extractMessageContent(message);
+    const messageId = message.id;
+    
+    console.log(`Processing message from ${contactName} (${contactNumber}): ${messageContent}`);
+    
+    // Get or create conversation
+    const conversationResult = await getOrCreateConversation(userId, contactName, contactNumber);
+    
+    if (conversationResult.error) {
+      throw conversationResult.error;
+    }
+    
+    const conversation = conversationResult.data;
+    
+    // Store message in database
+    const storeResult = await storeMessage(
+      userId,
+      conversation.id,
+      contactName,
+      contactNumber,
+      messageContent,
+      messageId
+    );
+    
+    if (storeResult.error) {
+      throw storeResult.error;
+    }
+    
+    // Here you would check if AI is enabled for this conversation
+    // and generate a response if needed
+    if (conversation.ai_enabled) {
+      // This would be where AI processing logic would go
+      console.log('AI is enabled for this conversation, would generate response here');
+    }
+    
+    return { success: true, conversationId: conversation.id };
+  } catch (error) {
+    console.error('Error processing WhatsApp message:', error);
+    throw error;
+  }
+}
+
 serve(async (req) => {
   // Log all incoming requests for debugging
   console.log(`Webhook request received: ${req.method} ${req.url}`);
@@ -248,13 +405,34 @@ serve(async (req) => {
       const userId = userData.user_id;
       console.log(`Processing webhook for user: ${userId} with phone_id: ${phoneNumberId}`);
       
-      // Here you would implement message handling logic
+      // Process messages from the payload
+      const messages = payload?.entry?.[0]?.changes?.[0]?.value?.messages || [];
+      const contact = payload?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0] || {};
+      
+      if (messages.length === 0) {
+        // This might be a status update or other type of notification
+        console.log('No messages in the payload, might be a status update');
+        return new Response(
+          JSON.stringify({ success: true, message: 'Status update received' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Process each message in the payload
+      const results = [];
+      for (const message of messages) {
+        try {
+          const result = await processWhatsAppMessage(message, contact, userId);
+          results.push(result);
+        } catch (error) {
+          console.error('Error processing message:', error);
+          results.push({ error: error.message });
+        }
+      }
       
       return new Response(
-        JSON.stringify({ success: true, userId }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
+        JSON.stringify({ success: true, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
