@@ -21,33 +21,73 @@ export async function getUserByPhoneId(phoneNumberId: string): Promise<UserConte
   try {
     console.log(`Looking up user for WhatsApp phone ID: ${phoneNumberId}`);
     
-    // Find the platform_secrets entry with this phone ID
+    // Debug: List all platform_secrets for troubleshooting
+    const { data: allSecrets, error: listError } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token');
+    
+    if (listError) {
+      console.error('Error listing platform secrets:', listError);
+    } else {
+      console.log('Available platform_secrets:', JSON.stringify(allSecrets));
+    }
+    
+    // First try the standard query with exact match
     const { data: secretsData, error: secretsError } = await supabase
       .from('platform_secrets')
       .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token')
       .eq('whatsapp_phone_id', phoneNumberId)
-      .single();
+      .maybeSingle();
     
-    if (secretsError) {
-      console.error('Error fetching platform secrets:', secretsError);
-      return null;
+    if (!secretsError && secretsData) {
+      console.log(`Found user: ${secretsData.user_id} for WhatsApp phone ID: ${phoneNumberId}`);
+      
+      return {
+        userId: secretsData.user_id,
+        whatsappPhoneId: secretsData.whatsapp_phone_id,
+        whatsappAccessToken: secretsData.whatsapp_access_token || '',
+        whatsappVerifyToken: secretsData.whatsapp_verify_token || '',
+      };
     }
     
-    if (!secretsData) {
-      console.error('No user found with the given WhatsApp phone ID');
-      return null;
+    // If no exact match found, try a more flexible approach
+    console.log('No exact match found, trying flexible matching...');
+    
+    if (allSecrets && allSecrets.length > 0) {
+      // Try different matching strategies
+      let matchedRecord = null;
+      
+      // Try trimming whitespace
+      matchedRecord = allSecrets.find(record => 
+        record.whatsapp_phone_id && 
+        phoneNumberId && 
+        record.whatsapp_phone_id.trim() === phoneNumberId.trim()
+      );
+      
+      // Try contains relationship
+      if (!matchedRecord) {
+        matchedRecord = allSecrets.find(record => 
+          record.whatsapp_phone_id && 
+          phoneNumberId && 
+          (record.whatsapp_phone_id.includes(phoneNumberId) || 
+           phoneNumberId.includes(record.whatsapp_phone_id))
+        );
+      }
+      
+      if (matchedRecord) {
+        console.log(`Found user through flexible matching: ${matchedRecord.user_id}`);
+        
+        return {
+          userId: matchedRecord.user_id,
+          whatsappPhoneId: matchedRecord.whatsapp_phone_id,
+          whatsappAccessToken: matchedRecord.whatsapp_access_token || '',
+          whatsappVerifyToken: matchedRecord.whatsapp_verify_token || '',
+        };
+      }
     }
     
-    // Create user context
-    const userContext: UserContext = {
-      userId: secretsData.user_id,
-      whatsappPhoneId: secretsData.whatsapp_phone_id,
-      whatsappAccessToken: secretsData.whatsapp_access_token || '',
-      whatsappVerifyToken: secretsData.whatsapp_verify_token || '',
-    };
-    
-    console.log(`Found user: ${userContext.userId} for WhatsApp phone ID: ${phoneNumberId}`);
-    return userContext;
+    console.error('No user found with the given WhatsApp phone ID after flexible search');
+    return null;
   } catch (error) {
     console.error('Error in getUserByPhoneId:', error);
     return null;
