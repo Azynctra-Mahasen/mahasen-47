@@ -32,6 +32,13 @@ export async function saveMessageToDatabase(
 export async function sendWhatsAppMessage(
   messagePayload: WhatsAppMessage
 ) {
+  // Clean up the phone ID by removing any whitespace
+  if (messagePayload.phoneId) {
+    messagePayload.phoneId = messagePayload.phoneId.trim();
+  }
+  
+  console.log(`Sending WhatsApp message to ${messagePayload.to} using phone ID: ${messagePayload.phoneId}`);
+  
   return await supabase.functions.invoke(
     'send-whatsapp',
     {
@@ -61,7 +68,8 @@ export async function getWhatsAppSecrets() {
   }
 
   const secrets = secretsData.reduce((acc, curr) => {
-    acc[curr.secret_type] = curr.secret_value;
+    // Trim any whitespace from secret values
+    acc[curr.secret_type] = curr.secret_value.trim();
     return acc;
   }, {} as Record<string, string>);
 
@@ -70,5 +78,6 @@ export async function getWhatsAppSecrets() {
     throw new Error("Missing required WhatsApp configuration. Please check your WhatsApp settings.");
   }
 
+  console.log(`Retrieved WhatsApp phoneId: ${secrets.whatsapp_phone_id}`);
   return secrets;
 }
