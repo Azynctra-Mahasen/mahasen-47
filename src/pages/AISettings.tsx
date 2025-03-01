@@ -29,14 +29,14 @@ const AISettings = () => {
     const loadSettings = async () => {
       try {
         // Get the session first
-        const sessionResponse = await supabase.auth.getSession();
-        if (!sessionResponse.data.session) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
           navigate("/login");
           return;
         }
         
         // Get user ID from session
-        const userId = sessionResponse.data.session.user.id;
+        const userId = sessionData.session.user.id;
 
         // Fetch AI settings
         const { data: settingsData, error } = await supabase
@@ -83,14 +83,14 @@ const AISettings = () => {
     setIsLoading(true);
     try {
       // Get the session first
-      const sessionResponse = await supabase.auth.getSession();
-      if (!sessionResponse.data.session) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
         navigate("/login");
         return;
       }
       
       // Get user ID from session
-      const userId = sessionResponse.data.session.user.id;
+      const userId = sessionData.session.user.id;
 
       const memoryLength = contextMemoryLength === "Disable" ? 0 : parseInt(contextMemoryLength);
       if (isNaN(memoryLength) || memoryLength < 0 || memoryLength > 5) {
@@ -116,7 +116,8 @@ const AISettings = () => {
         const { error } = await supabase
           .from('ai_settings')
           .update(aiSettings)
-          .eq('id', aiSettingsId);
+          .eq('id', aiSettingsId)
+          .eq('user_id', userId); // Add user_id check for security
 
         if (error) throw error;
       } else {

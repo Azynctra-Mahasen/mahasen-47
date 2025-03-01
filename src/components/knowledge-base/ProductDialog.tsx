@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +26,7 @@ interface Product {
   description: string;
   price: number;
   discounts?: number | null;
+  user_id?: string;
 }
 
 interface ProductDialogProps {
@@ -108,11 +110,12 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
   const onSubmit = async (values: ProductFormValues) => {
     setIsSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
         throw new Error("User not authenticated");
       }
-
+      
+      const userId = sessionData.session.user.id;
       const textToEmbed = `${values.title} ${values.description}`;
 
       if (isEditing && product) {
@@ -132,7 +135,8 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
             price: values.price,
             discounts: values.discounts,
             embedding,
-            embedding_status: 'completed'
+            embedding_status: 'completed',
+            user_id: userId  // Ensure user_id is included in updates
           })
           .eq('id', product.id);
 
@@ -158,7 +162,7 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
             discounts: values.discounts,
             embedding,
             embedding_status: 'completed',
-            user_id: session.user.id
+            user_id: userId
           });
 
         if (insertError) throw insertError;

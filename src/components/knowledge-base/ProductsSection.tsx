@@ -13,6 +13,7 @@ interface Product {
   description: string;
   price: number;
   discounts: number | null;
+  user_id: string;
 }
 
 export function ProductsSection() {
@@ -26,14 +27,14 @@ export function ProductsSection() {
       setLoading(true);
       
       // Get the session first
-      const sessionResponse = await supabase.auth.getSession();
-      if (!sessionResponse.data.session) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
         console.error("No active session");
         return;
       }
       
       // Get user ID from session
-      const userId = sessionResponse.data.session.user.id;
+      const userId = sessionData.session.user.id;
 
       const { data: productsData, error } = await supabase
         .from('products')
