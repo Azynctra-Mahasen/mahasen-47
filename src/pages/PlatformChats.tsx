@@ -29,13 +29,21 @@ const PlatformChats = () => {
     if (isSelectionMode) return;
     
     try {
+      // Get the current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Authentication required");
+        return;
+      }
+
       // Mark all messages as read when entering the chat
       const { error } = await supabase
         .from("messages")
         .update({ read: true })
         .eq("conversation_id", conversationId)
         .eq("status", "received")
-        .eq("read", false);
+        .eq("read", false)
+        .eq("user_id", session.user.id);
 
       if (error) {
         console.error("Error marking messages as read:", error);
@@ -68,11 +76,19 @@ const PlatformChats = () => {
     if (selectedConversations.size === 0) return;
 
     try {
+      // Get the current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Authentication required");
+        return;
+      }
+
       // Delete messages first
       const { error: messagesError } = await supabase
         .from("messages")
         .delete()
-        .in("conversation_id", Array.from(selectedConversations));
+        .in("conversation_id", Array.from(selectedConversations))
+        .eq("user_id", session.user.id);
 
       if (messagesError) throw messagesError;
 
@@ -80,7 +96,8 @@ const PlatformChats = () => {
       const { error: conversationsError } = await supabase
         .from("conversations")
         .delete()
-        .in("id", Array.from(selectedConversations));
+        .in("id", Array.from(selectedConversations))
+        .eq("user_id", session.user.id);
 
       if (conversationsError) throw conversationsError;
 
