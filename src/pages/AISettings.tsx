@@ -121,10 +121,13 @@ const AISettings = () => {
 
         if (error) throw error;
       } else {
-        // Create new settings
+        // Create new settings - don't specify an ID, let the database generate it
         const { error } = await supabase
           .from('ai_settings')
-          .insert(aiSettings);
+          .insert({
+            ...aiSettings,
+            created_at: new Date().toISOString(),
+          });
 
         if (error) throw error;
       }
@@ -133,6 +136,18 @@ const AISettings = () => {
         title: "Settings saved",
         description: "AI settings have been updated successfully.",
       });
+      
+      // Reload settings to get the new ID
+      const { data: newSettings, error: fetchError } = await supabase
+        .from('ai_settings')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+        
+      if (!fetchError && newSettings) {
+        setAISettingsId(newSettings.id);
+      }
+      
     } catch (error) {
       console.error('Error saving AI settings:', error);
       toast({
