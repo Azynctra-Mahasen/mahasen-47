@@ -1,136 +1,118 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { TicketHandler } from './ticket-handler.ts';
-import { sendWhatsAppMessage } from '../whatsapp.ts';
+import { createTicket, linkMessageToTicket, saveMessage, updateTicket } from "../database.ts";
+import { formatKnowledgeBaseContext, searchKnowledgeBase } from "./knowledge-base.ts";
+import { MessageContext } from "../message-processor.ts";
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-);
+export async function processOrderIntent(
+  messageContent: string,
+  intentData: any,
+  context: MessageContext,
+  aiSettings: any
+) {
+  try {
+    console.log("Processing order intent");
 
-interface OrderContext {
-  messageId: string;
-  userId: string;
-  userName: string;
-  whatsappMessageId: string;
-  userMessage: string;
-}
-
-interface PendingOrder {
-  product: string;
-  quantity: number;
-  state: 'CONFIRMING' | 'PROCESSING';
-  price?: number;
-}
-
-export class OrderProcessor {
-  static async handlePendingOrderConfirmation(context: OrderContext): Promise<boolean> {
-    if (!this.isConfirmationMessage(context.userMessage)) {
-      return false;
-    }
-
-    console.log('Checking for pending order for user:', context.userId);
-
-    // Get the pending order from conversation_contexts
-    const { data: pendingOrder, error } = await supabase
-      .from('conversation_contexts')
-      .select('context')
-      .eq('conversation_id', context.userId)
-      .eq('context_type', 'pending_order')
-      .maybeSingle();
-
-    if (error || !pendingOrder) {
-      console.log('No pending order found:', error);
-      return false;
-    }
-
-    try {
-      const orderInfo: PendingOrder = JSON.parse(pendingOrder.context);
-      console.log('Found pending order:', orderInfo);
-
-      // Create ticket with the exact stored order information
-      const ticketResponse = await TicketHandler.handleTicketCreation(
+    // Check if this is a confirmation message
+    const isConfirmation = isOrderConfirmation(messageContent);
+    
+    if (isConfirmation) {
+      console.log("Order confirmation detected");
+      
+      // Create an order ticket
+      const ticket = await createTicket(
         {
-          intent: 'ORDER_PLACEMENT',
-          confidence: 1,
-          requires_escalation: false,
-          escalation_reason: null,
-          detected_entities: {
-            product_mentions: [orderInfo.product],
-            issue_type: null,
-            urgency_level: 'medium',
-            order_info: {
-              ...orderInfo,
-              state: 'PROCESSING',
-              confirmed: true
-            }
-          }
+          title: `Order from ${context.userName}`,
+          body: messageContent,
+          customerName: context.userName,
+          platform: "whatsapp",
+          type: "ORDER",
+          status: "New",
+          conversationId: context.conversationId,
+          intentType: "ORDER",
+          priority: "HIGH",
+          productInfo: intentData.productInfo || {}
         },
-        {
-          messageId: context.whatsappMessageId,
-          conversationId: context.userId,
-          userName: context.userName,
-          platform: 'whatsapp',
-          messageContent: `Order confirmation for ${orderInfo.product}`
-        }
+        context.userId // Add user_id to ticket creation
       );
 
-      // Delete the pending order only after successful ticket creation
-      if (ticketResponse) {
-        await supabase
-          .from('conversation_contexts')
-          .delete()
-          .eq('conversation_id', context.userId)
-          .eq('context_type', 'pending_order');
+      // Link the message to the ticket
+      await linkMessageToTicket(ticket.id, context.messageId);
 
-        await sendWhatsAppMessage(
-          context.userId,
-          ticketResponse,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
-          Deno.env.get('WHATSAPP_PHONE_ID')!
-        );
-        return true;
-      }
+      // Create a confirmation message
+      const confirmationText = `Your Order for ${intentData.productInfo?.product || "product"} for ${intentData.productInfo?.quantity || "1"} is placed successfully. Order Number is ${ticket.id}.`;
+      
+      // Update the ticket with confirmation message ID
+      await updateTicket(
+        ticket.id, 
+        { 
+          order_status: "confirmed",
+          product_info: {
+            ...intentData.productInfo,
+            order_number: ticket.id,
+            status: "confirmed"
+          }
+        },
+        context.userId // Add user_id for ticket update
+      );
 
-      return false;
-    } catch (parseError) {
-      console.error('Error parsing pending order:', parseError);
-      return false;
-    }
-  }
+      return {
+        responseText: confirmationText,
+        intentData: {
+          ...intentData,
+          type: "ORDER_CONFIRMATION"
+        }
+      };
+    } else {
+      // Determine if we need product or quantity information
+      const productInfo = intentData.productInfo || {};
+      let responseText = "";
+      let updatedIntentData = intentData;
 
-  static async storePendingOrder(userId: string, orderInfo: any): Promise<void> {
-    console.log('Storing new pending order:', orderInfo);
-
-    // Delete any existing pending orders first
-    await supabase
-      .from('conversation_contexts')
-      .delete()
-      .eq('conversation_id', userId)
-      .eq('context_type', 'pending_order');
-
-    // Store the new pending order
-    const { error } = await supabase
-      .from('conversation_contexts')
-      .insert({
-        conversation_id: userId,
-        context_type: 'pending_order',
-        context: JSON.stringify({
-          product: orderInfo.product,
-          quantity: orderInfo.quantity,
-          state: 'CONFIRMING',
-          price: orderInfo.price
-        })
+      // Initialize Supabase AI Session for embeddings
+      const supabaseAISession = new Supabase.ai.Session('gte-small');
+      console.log('Generating embedding for order query...');
+      
+      const embedding = await supabaseAISession.run(messageContent, {
+        mean_pool: true,
+        normalize: true,
       });
 
-    if (error) {
-      console.error('Error storing pending order:', error);
-      throw error;
-    }
-  }
+      // Search knowledge base with user_id filter
+      const searchResults = await searchKnowledgeBase(embedding, context.userId);
+      console.log(`Knowledge base search returned ${searchResults.length} results for user ${context.userId}`);
 
-  private static isConfirmationMessage(message: string): boolean {
-    const confirmationWords = ['yes', 'ow', 'ඔව්'];
-    return confirmationWords.includes(message.toLowerCase().trim());
+      // Format knowledge base context
+      const knowledgeBaseContext = await formatKnowledgeBaseContext(searchResults);
+
+      if (!productInfo.product) {
+        responseText = "Please specify which product you would like to order.";
+      } else if (!productInfo.quantity) {
+        responseText = `How many ${productInfo.product} would you like to order?`;
+      } else {
+        // We have both product and quantity, ask for confirmation
+        responseText = `Please confirm your order:\n- Product: ${productInfo.product}\n- Quantity: ${productInfo.quantity}\n\nType "Yes" or "Ow" or "ඔව්" to place the order.`;
+      }
+
+      return {
+        responseText,
+        intentData: updatedIntentData
+      };
+    }
+  } catch (error) {
+    console.error("Error processing order intent:", error);
+    return {
+      responseText: "I apologize, but I'm having trouble processing your order right now. Please try again later.",
+      intentData: {
+        type: "ERROR",
+        errorMessage: error.message
+      }
+    };
   }
+}
+
+function isOrderConfirmation(message: string) {
+  const confirmationKeywords = ["yes", "ow", "ඔව්", "ok", "confirm"];
+  const lowerMessage = message.toLowerCase().trim();
+  
+  return confirmationKeywords.some(keyword => lowerMessage === keyword);
 }

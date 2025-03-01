@@ -1,312 +1,110 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
-import { UserContext } from './auth-handler.ts';
-import { generateAIResponse } from './ollama.ts';
-import { sendWhatsAppMessage } from './whatsapp.ts';
+import { getConversationHistory } from "./database.ts";
+import { generateAIResponse } from "./ollama.ts";
+import { detectIntent } from "./services/intent-processor.ts";
+import { formatKnowledgeBaseContext, searchKnowledgeBase } from "./services/knowledge-base.ts";
+import { processOrderIntent } from "./services/order-processor.ts";
+import { formatResponse } from "./services/response-processor.ts";
 
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-/**
- * Process WhatsApp webhook messages
- * @param payload The webhook payload from WhatsApp
- * @param userContext The authenticated user context
- */
-export async function processMessage(payload: any, userContext: UserContext) {
-  try {
-    // Extract the message from the payload
-    const value = payload?.entry?.[0]?.changes?.[0]?.value;
-    
-    if (!value || value.messaging_product !== 'whatsapp') {
-      console.log('Not a WhatsApp message or invalid payload');
-      return;
-    }
-    
-    const messages = value.messages || [];
-    
-    if (messages.length === 0) {
-      console.log('No messages in the payload');
-      return;
-    }
-    
-    // Process each message in the payload
-    for (const message of messages) {
-      await handleMessage(message, value, userContext);
-    }
-  } catch (error) {
-    console.error('Error processing webhook message:', error);
-    throw error;
-  }
+export interface MessageContext {
+  conversationId: string;
+  messageId: string;
+  userId: string;
+  phoneNumberId: string;
+  userName: string;
 }
 
-/**
- * Handle a single WhatsApp message
- * @param message The message object
- * @param value The value object from the webhook payload
- * @param userContext The authenticated user context
- */
-async function handleMessage(message: any, value: any, userContext: UserContext) {
+export async function processMessage(message: any, context: MessageContext, aiSettings: any) {
   try {
-    // Basic message validation
-    if (!message.from || !message.id || !message.type) {
-      console.error('Invalid message format:', message);
-      return;
-    }
+    console.log(`Processing message from ${context.userName} in conversation ${context.conversationId}`);
     
-    // Check for duplicates to avoid processing the same message twice
-    const { data: existingMessage } = await supabase
-      .from('messages')
-      .select('id')
-      .eq('whatsapp_message_id', message.id)
-      .eq('user_id', userContext.userId)
-      .single();
-    
-    if (existingMessage) {
-      console.log(`Message ${message.id} already processed, skipping`);
-      return;
-    }
-    
-    // Get contact information
-    const contact = value.contacts?.[0] || {};
-    const contactName = contact.profile?.name || 'Unknown';
-    const contactNumber = message.from;
-    
-    // Get or create conversation
-    let conversationId = await getOrCreateConversation(
-      userContext.userId,
-      contactName,
-      contactNumber
-    );
-    
-    // Save the incoming message to the database
-    const { data: savedMessage, error: saveError } = await supabase
-      .from('messages')
-      .insert({
-        user_id: userContext.userId,
-        conversation_id: conversationId,
-        sender_name: contactName,
-        sender_number: contactNumber,
-        content: extractMessageContent(message),
-        status: 'received',
-        whatsapp_message_id: message.id
-      })
-      .select()
-      .single();
-    
-    if (saveError) {
-      console.error('Error saving message to database:', saveError);
-      return;
-    }
-    
-    console.log(`Saved incoming message: ${savedMessage.id}`);
-    
-    // Get AI settings for the user
-    const { data: aiSettings } = await supabase
-      .from('ai_settings')
-      .select('*')
-      .limit(1)
-      .single();
-    
-    // Check if the conversation has AI enabled
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('ai_enabled')
-      .eq('id', conversationId)
-      .single();
-    
-    // Generate and send AI response if enabled
-    if (conversation?.ai_enabled) {
-      try {
-        // Get context for AI generation
-        const messageHistory = await getConversationHistory(conversationId);
-        
-        const context = {
-          userId: userContext.userId,
-          messageId: savedMessage.id,
-          conversationId: conversationId,
-          userName: contactName,
-          messageHistory: messageHistory
-        };
-        
-        // Generate AI response
-        const aiResponse = await generateAIResponse(
-          extractMessageContent(message),
-          context,
-          aiSettings
-        );
-        
-        if (aiResponse) {
-          // Send the AI response back to the user
-          await sendResponse(
-            contactNumber,
-            aiResponse,
-            conversationId,
-            contactName,
-            userContext
-          );
-        }
-      } catch (aiError) {
-        console.error('Error generating AI response:', aiError);
+    // Get message content based on type
+    let messageContent = "";
+    if (message.type === "text" && message.text) {
+      messageContent = message.text.body;
+    } else if (message.type === "interactive" && message.interactive) {
+      if (message.interactive.type === "button_reply") {
+        messageContent = message.interactive.button_reply.title;
+      } else if (message.interactive.type === "list_reply") {
+        messageContent = message.interactive.list_reply.title;
       }
+    } else {
+      messageContent = `[Unsupported message type: ${message.type}]`;
     }
-  } catch (error) {
-    console.error('Error handling message:', error);
-    throw error;
-  }
-}
 
-/**
- * Extract content from different message types
- * @param message The message object
- */
-function extractMessageContent(message: any): string {
-  switch (message.type) {
-    case 'text':
-      return message.text?.body || '';
-    case 'image':
-      return '[Image message]';
-    case 'audio':
-      return '[Audio message]';
-    case 'video':
-      return '[Video message]';
-    case 'document':
-      return '[Document message]';
-    case 'location':
-      return '[Location message]';
-    case 'contacts':
-      return '[Contacts message]';
-    case 'button':
-      return message.button?.text || '[Button message]';
-    case 'interactive':
-      return message.interactive?.button_reply?.title || '[Interactive message]';
-    default:
-      return '[Unsupported message type]';
-  }
-}
+    console.log(`Message content: ${messageContent}`);
 
-/**
- * Get or create a conversation for a contact
- * @param userId The user ID
- * @param contactName The contact name
- * @param contactNumber The contact number
- */
-async function getOrCreateConversation(
-  userId: string,
-  contactName: string,
-  contactNumber: string
-): Promise<string> {
-  try {
-    // Check if conversation exists
-    const { data: existingConversation } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('contact_number', contactNumber)
-      .single();
-    
-    if (existingConversation) {
-      return existingConversation.id;
+    // Detect intent
+    const intentData = await detectIntent(messageContent);
+    console.log("Intent detected:", JSON.stringify(intentData));
+
+    // Handle order intent specifically
+    if (intentData.type === "ORDER") {
+      return await processOrderIntent(
+        messageContent, 
+        intentData, 
+        context,
+        aiSettings
+      );
     }
-    
-    // Create new conversation
-    const { data: newConversation, error } = await supabase
-      .from('conversations')
-      .insert({
-        user_id: userId,
-        contact_name: contactName,
-        contact_number: contactNumber,
-        platform: 'whatsapp',
-        ai_enabled: true, // Default to AI enabled
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Error creating conversation:', error);
-      throw error;
-    }
-    
-    return newConversation.id;
-  } catch (error) {
-    console.error('Error in getOrCreateConversation:', error);
-    throw error;
-  }
-}
 
-/**
- * Get conversation history for context
- * @param conversationId The conversation ID
- */
-async function getConversationHistory(conversationId: string): Promise<any[]> {
-  const { data: messages, error } = await supabase
-    .from('messages')
-    .select('content, sender_name, sender_number, created_at')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: false })
-    .limit(10);
-  
-  if (error) {
-    console.error('Error fetching conversation history:', error);
-    return [];
-  }
-  
-  return messages.reverse();
-}
-
-/**
- * Send response back to the user
- * @param to Recipient phone number
- * @param content Message content
- * @param conversationId Conversation ID
- * @param recipientName Recipient name
- * @param userContext User context with credentials
- */
-async function sendResponse(
-  to: string,
-  content: string,
-  conversationId: string,
-  recipientName: string,
-  userContext: UserContext
-) {
-  try {
-    // Save outgoing message to database
-    const { data: savedMessage, error: saveError } = await supabase
-      .from('messages')
-      .insert({
-        user_id: userContext.userId,
-        conversation_id: conversationId,
-        sender_name: 'AI Assistant',
-        sender_number: userContext.whatsappPhoneId,
-        content: content,
-        status: 'sent',
-      })
-      .select()
-      .single();
-    
-    if (saveError) {
-      console.error('Error saving outgoing message:', saveError);
-      return;
-    }
-    
-    // Send message via WhatsApp API
-    await sendWhatsAppMessage(
-      to,
-      content,
-      userContext.whatsappPhoneId,
-      userContext.whatsappAccessToken
+    // Retrieve conversation history using user context
+    const conversationHistory = await getConversationHistory(
+      context.conversationId,
+      context.userId,
+      aiSettings.context_memory_length || 2
     );
+    console.log(`Retrieved ${conversationHistory.length} messages from history for user ${context.userId}`);
+
+    // Format conversation history for the AI
+    const formattedHistory = conversationHistory.map(msg => {
+      return {
+        role: msg.status === "sent" ? "assistant" : "user",
+        content: msg.content
+      };
+    });
+
+    // Initialize Supabase AI Session for embeddings
+    const supabaseAISession = new Supabase.ai.Session('gte-small');
+    console.log('Generating embedding for user query...');
     
-    // Update message status
-    await supabase
-      .from('messages')
-      .update({ status: 'delivered' })
-      .eq('id', savedMessage.id);
+    const embedding = await supabaseAISession.run(messageContent, {
+      mean_pool: true,
+      normalize: true,
+    });
+
+    // Search knowledge base with user_id filter
+    const searchResults = await searchKnowledgeBase(embedding, context.userId);
+    console.log(`Knowledge base search returned ${searchResults.length} results for user ${context.userId}`);
+
+    // Format knowledge base context
+    const knowledgeBaseContext = await formatKnowledgeBaseContext(searchResults);
+
+    // Generate AI response
+    const aiResponseText = await generateAIResponse(
+      messageContent,
+      {
+        history: formattedHistory,
+        userName: context.userName,
+        conversationId: context.conversationId,
+        messageId: context.messageId,
+        knowledgeBase: knowledgeBaseContext
+      },
+      aiSettings
+    );
+
+    // Format the response for WhatsApp
+    const formattedResponse = formatResponse(aiResponseText, intentData);
     
-    console.log(`Sent response to ${to}`);
+    return {
+      responseText: formattedResponse,
+      intentData
+    };
   } catch (error) {
-    console.error('Error sending response:', error);
-    throw error;
+    console.error("Error processing message:", error);
+    return {
+      responseText: "I apologize, but I'm having trouble processing your message right now. Please try again later.",
+      intentData: null
+    };
   }
 }
