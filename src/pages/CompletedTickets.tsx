@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { TicketList } from "@/components/tickets/TicketList";
 import { TicketHeader } from "@/components/tickets/TicketHeader";
 import { Ticket, TicketType, TicketPriority } from "@/types/ticket";
+import { toast } from "sonner";
 
 const CompletedTickets = () => {
   const navigate = useNavigate();
@@ -18,9 +19,17 @@ const CompletedTickets = () => {
   useEffect(() => {
     const fetchCompletedTickets = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          toast.error("Please login to view tickets");
+          navigate("/login");
+          return;
+        }
+
         const { data, error } = await supabase
           .from("tickets")
           .select("*")
+          .eq('user_id', session.user.id)
           .eq('status', 'Completed')
           .order('id', { ascending: true });
 
@@ -42,6 +51,7 @@ const CompletedTickets = () => {
         setTickets(transformedData);
       } catch (error) {
         console.error("Error fetching completed tickets:", error);
+        toast.error("Failed to load completed tickets");
       } finally {
         setLoading(false);
       }
@@ -49,7 +59,10 @@ const CompletedTickets = () => {
 
     fetchCompletedTickets();
 
-    // Subscribe to changes in the tickets table
+    // Subscribe to changes in the tickets table for the current user
+    const { data: { session } } = supabase.auth.getSession();
+    if (!session) return;
+
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -58,7 +71,7 @@ const CompletedTickets = () => {
           event: '*',
           schema: 'public',
           table: 'tickets',
-          filter: 'status=eq.Completed'
+          filter: `status=eq.Completed AND user_id=eq.${session.data.user.id}`
         },
         () => {
           // Refetch tickets when there are changes
@@ -70,7 +83,7 @@ const CompletedTickets = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8">

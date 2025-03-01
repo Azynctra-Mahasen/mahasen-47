@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -109,20 +108,22 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
   const onSubmit = async (values: ProductFormValues) => {
     setIsSubmitting(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("User not authenticated");
+      }
+
       const textToEmbed = `${values.title} ${values.description}`;
 
       if (isEditing && product) {
-        // First remove existing embedding
         await removeExistingEmbedding(product.id);
         
-        // Generate new embedding
         const embedding = await generateEmbedding(textToEmbed);
         toast({
           title: "Processing",
           description: "Updating product with new embedding...",
         });
 
-        // Update product with new data and embedding
         const { error: updateError } = await supabase
           .from('products')
           .update({
@@ -142,7 +143,6 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
           description: "Product updated successfully with new embedding",
         });
       } else {
-        // For new products, generate embedding and insert
         const embedding = await generateEmbedding(textToEmbed);
         toast({
           title: "Processing",
@@ -157,7 +157,8 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
             price: values.price,
             discounts: values.discounts,
             embedding,
-            embedding_status: 'completed'
+            embedding_status: 'completed',
+            user_id: session.user.id
           });
 
         if (insertError) throw insertError;

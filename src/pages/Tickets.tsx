@@ -7,6 +7,7 @@ import { TicketList } from "@/components/tickets/TicketList";
 import { TicketHeader } from "@/components/tickets/TicketHeader";
 import { Ticket, TicketType, TicketPriority } from "@/types/ticket";
 import { useRealtimeTickets } from "@/components/tickets/useRealtimeTickets";
+import { toast } from "sonner";
 
 const Tickets = () => {
   const navigate = useNavigate();
@@ -18,15 +19,23 @@ const Tickets = () => {
     direction: 'asc' 
   });
 
-  // Use our new real-time hook
+  // Use our real-time hook
   useRealtimeTickets(setTickets, sortConfig);
 
   useEffect(() => {
     const fetchTickets = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          toast.error("Please login to view tickets");
+          navigate("/login");
+          return;
+        }
+
         const { data, error } = await supabase
           .from("tickets")
           .select("*")
+          .eq('user_id', session.user.id)
           .neq('status', 'Completed')
           .order('id', { ascending: true });
 
@@ -48,13 +57,14 @@ const Tickets = () => {
         setTickets(transformedData);
       } catch (error) {
         console.error("Error fetching tickets:", error);
+        toast.error("Failed to load tickets");
       } finally {
         setLoading(false);
       }
     };
 
     fetchTickets();
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8">
