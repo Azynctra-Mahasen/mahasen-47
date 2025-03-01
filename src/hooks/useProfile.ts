@@ -30,9 +30,8 @@ export const useProfile = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        // Fix type error by using a simpler approach to get session
-        const { data } = await supabase.auth.getSession();
-        const session = data.session;
+        const sessionResponse = await supabase.auth.getSession();
+        const session = sessionResponse.data.session;
         
         if (!session) {
           navigate("/login");

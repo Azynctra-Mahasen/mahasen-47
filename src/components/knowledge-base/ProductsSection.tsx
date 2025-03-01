@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2 } from "lucide-react";
@@ -25,9 +24,8 @@ export function ProductsSection() {
     try {
       setLoading(true);
       
-      // Fix type error by using a simpler approach to get session
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
+      const sessionResponse = await supabase.auth.getSession();
+      const session = sessionResponse.data.session;
       
       if (!session) {
         console.error("No active session");

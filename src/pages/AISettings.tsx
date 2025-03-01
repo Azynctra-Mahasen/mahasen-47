@@ -28,16 +28,15 @@ const AISettings = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Fix type error by using a simpler approach to get session
-        const { data } = await supabase.auth.getSession();
-        const session = data.session;
+        const sessionResponse = await supabase.auth.getSession();
+        const session = sessionResponse.data.session;
         
         if (!session) {
           navigate("/login");
           return;
         }
 
-        const { data, error } = await supabase
+        const { data: settingsData, error } = await supabase
           .from('ai_settings')
           .select('*')
           .eq('user_id', session.user.id)
@@ -48,13 +47,13 @@ const AISettings = () => {
           throw error;
         }
 
-        if (data) {
-          setAISettingsId(data.id);
-          setTone(data.tone as AITone);
-          setBehaviour(data.behaviour || "");
-          setContextMemoryLength(data.context_memory_length?.toString() || "2");
-          setConversationTimeout(data.conversation_timeout_hours || 1);
-          setModelName(data.model_name);
+        if (settingsData) {
+          setAISettingsId(settingsData.id);
+          setTone(settingsData.tone as AITone);
+          setBehaviour(settingsData.behaviour || "");
+          setContextMemoryLength(settingsData.context_memory_length?.toString() || "2");
+          setConversationTimeout(settingsData.conversation_timeout_hours || 1);
+          setModelName(settingsData.model_name);
         }
       } catch (error) {
         console.error('Error loading AI settings:', error);
@@ -80,7 +79,9 @@ const AISettings = () => {
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await supabase.auth.getSession();
+      const session = sessionResponse.data.session;
+      
       if (!session) {
         navigate("/login");
         return;
