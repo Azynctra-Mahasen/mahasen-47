@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2 } from "lucide-react";
@@ -24,18 +25,20 @@ export function ProductsSection() {
     try {
       setLoading(true);
       
+      // Get the session first
       const sessionResponse = await supabase.auth.getSession();
-      const session = sessionResponse.data.session;
-      
-      if (!session) {
+      if (!sessionResponse.data.session) {
         console.error("No active session");
         return;
       }
+      
+      // Get user ID from session
+      const userId = sessionResponse.data.session.user.id;
 
       const { data: productsData, error } = await supabase
         .from('products')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

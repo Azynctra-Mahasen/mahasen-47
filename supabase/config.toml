@@ -1,41 +1,27 @@
 
-# This file is used to configure your Supabase project.
-# For more information, please visit: https://supabase.com/docs/guides/getting-started/local-development
+project_id = "rorweifvcparnpgztvsq"
 
 [api]
-port = 54321
-schemas = ["public", "storage", "graphql_public"]
-extra_search_path = ["public", "extensions"]
-max_rows = 1000
-
-[db]
-port = 54322
-
-[studio]
-port = 54323
-
-[inbucket]
-port = 54324
-smtp_port = 54325
-pop3_port = 54326
-
-[auth]
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://localhost:3000"]
-jwt_expiry = 3600
-enable_signup = true
-
-[storage]
+enabled = true
+cors = {
+  enabled = true,
+  allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowed_headers = ["authorization", "x-client-info", "apikey", "content-type", "accept", "accept-encoding", "x-requested-with"],
+  max_age = 86400
+}
 
 [functions]
-[functions.generate-embedding]
-verify_jwt = true
-[functions.generate-file-embedding]
-verify_jwt = true
-[functions.messenger-webhook]
-verify_jwt = true
 [functions.send-whatsapp]
 verify_jwt = true
-[functions.whatsapp-webhook]
+
+[functions.generate-embedding]
+verify_jwt = true
+
+[functions.generate-file-embedding]
+verify_jwt = true
+
+[functions.messenger-webhook]
 verify_jwt = false
 
+[functions.whatsapp-webhook]
+verify_jwt = false

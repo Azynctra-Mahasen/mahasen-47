@@ -28,18 +28,21 @@ const AISettings = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
+        // Get the session first
         const sessionResponse = await supabase.auth.getSession();
-        const session = sessionResponse.data.session;
-        
-        if (!session) {
+        if (!sessionResponse.data.session) {
           navigate("/login");
           return;
         }
+        
+        // Get user ID from session
+        const userId = sessionResponse.data.session.user.id;
 
+        // Fetch AI settings
         const { data: settingsData, error } = await supabase
           .from('ai_settings')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('user_id', userId)
           .maybeSingle();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows returned" which is fine for new users
@@ -79,13 +82,15 @@ const AISettings = () => {
   const handleSave = async () => {
     setIsLoading(true);
     try {
+      // Get the session first
       const sessionResponse = await supabase.auth.getSession();
-      const session = sessionResponse.data.session;
-      
-      if (!session) {
+      if (!sessionResponse.data.session) {
         navigate("/login");
         return;
       }
+      
+      // Get user ID from session
+      const userId = sessionResponse.data.session.user.id;
 
       const memoryLength = contextMemoryLength === "Disable" ? 0 : parseInt(contextMemoryLength);
       if (isNaN(memoryLength) || memoryLength < 0 || memoryLength > 5) {
@@ -103,7 +108,7 @@ const AISettings = () => {
         conversation_timeout_hours: conversationTimeout,
         model_name: modelName,
         updated_at: new Date().toISOString(),
-        user_id: session.user.id
+        user_id: userId
       };
 
       if (aiSettingsId) {
