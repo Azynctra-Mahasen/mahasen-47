@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,8 +19,11 @@ const CompletedTickets = () => {
   useEffect(() => {
     const fetchCompletedTickets = async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) {
+        // Fix the session retrieval pattern
+        const sessionResponse = await supabase.auth.getSession();
+        const session = sessionResponse.data.session;
+        
+        if (!session) {
           toast.error("Please login to view tickets");
           navigate("/login");
           return;
@@ -28,7 +32,7 @@ const CompletedTickets = () => {
         const { data, error } = await supabase
           .from("tickets")
           .select("*")
-          .eq('user_id', sessionData.session.user.id)
+          .eq('user_id', session.user.id)
           .eq('status', 'Completed')
           .order('id', { ascending: true });
 
@@ -60,8 +64,10 @@ const CompletedTickets = () => {
 
     // Subscribe to changes in the tickets table for the current user
     const setupRealtimeSubscription = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) return;
+      const sessionResponse = await supabase.auth.getSession();
+      const session = sessionResponse.data.session;
+      
+      if (!session) return;
 
       const channel = supabase
         .channel('schema-db-changes')
@@ -71,7 +77,7 @@ const CompletedTickets = () => {
             event: '*',
             schema: 'public',
             table: 'tickets',
-            filter: `status=eq.Completed AND user_id=eq.${sessionData.session.user.id}`
+            filter: `status=eq.Completed AND user_id=eq.${session.user.id}`
           },
           () => {
             // Refetch tickets when there are changes

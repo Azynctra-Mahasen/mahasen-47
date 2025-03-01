@@ -25,9 +25,11 @@ export function ProductsSection() {
     try {
       setLoading(true);
       
-      // Get current user
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
+      // Get current user - fix the TypeScript error by avoiding nested destructuring
+      const sessionResponse = await supabase.auth.getSession();
+      const session = sessionResponse.data.session;
+      
+      if (!session) {
         console.error("No active session");
         return;
       }
@@ -35,7 +37,7 @@ export function ProductsSection() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('user_id', sessionData.session.user.id)
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
