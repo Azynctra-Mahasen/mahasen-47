@@ -53,6 +53,7 @@ export type Database = {
           tone: Database["public"]["Enums"]["ai_tone"]
           updated_at: string
           use_mcp: boolean | null
+          user_id: string | null
         }
         Insert: {
           behaviour?: string | null
@@ -64,6 +65,7 @@ export type Database = {
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
           use_mcp?: boolean | null
+          user_id?: string | null
         }
         Update: {
           behaviour?: string | null
@@ -75,6 +77,7 @@ export type Database = {
           tone?: Database["public"]["Enums"]["ai_tone"]
           updated_at?: string
           use_mcp?: boolean | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -416,6 +419,7 @@ export type Database = {
           price: number
           title: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -427,6 +431,7 @@ export type Database = {
           price: number
           title: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -438,6 +443,7 @@ export type Database = {
           price?: number
           title?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }

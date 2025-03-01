@@ -43,7 +43,19 @@ export function ProductsSection() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setProducts(productsData || []);
+      
+      // Ensure we cast the data to the Product type with user_id
+      const typedProducts: Product[] = productsData ? 
+        productsData.map(p => ({
+          id: p.id,
+          title: p.title,
+          description: p.description,
+          price: p.price,
+          discounts: p.discounts,
+          user_id: p.user_id
+        })) : [];
+        
+      setProducts(typedProducts);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');

@@ -26,7 +26,7 @@ interface Product {
   description: string;
   price: number;
   discounts?: number | null;
-  user_id?: string;
+  user_id: string;
 }
 
 interface ProductDialogProps {
