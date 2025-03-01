@@ -28,8 +28,8 @@ const AISettings = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
           navigate("/login");
           return;
         }
@@ -37,7 +37,7 @@ const AISettings = () => {
         const { data, error } = await supabase
           .from('ai_settings')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('user_id', sessionData.session.user.id)
           .maybeSingle();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows returned" which is fine for new users

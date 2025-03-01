@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,8 +18,8 @@ const CompletedTickets = () => {
   useEffect(() => {
     const fetchCompletedTickets = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
           toast.error("Please login to view tickets");
           navigate("/login");
           return;
@@ -29,7 +28,7 @@ const CompletedTickets = () => {
         const { data, error } = await supabase
           .from("tickets")
           .select("*")
-          .eq('user_id', session.user.id)
+          .eq('user_id', sessionData.session.user.id)
           .eq('status', 'Completed')
           .order('id', { ascending: true });
 
@@ -60,29 +59,33 @@ const CompletedTickets = () => {
     fetchCompletedTickets();
 
     // Subscribe to changes in the tickets table for the current user
-    const { data: { session } } = supabase.auth.getSession();
-    if (!session) return;
+    const setupRealtimeSubscription = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
 
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tickets',
-          filter: `status=eq.Completed AND user_id=eq.${session.data.user.id}`
-        },
-        () => {
-          // Refetch tickets when there are changes
-          fetchCompletedTickets();
-        }
-      )
-      .subscribe();
+      const channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tickets',
+            filter: `status=eq.Completed AND user_id=eq.${sessionData.session.user.id}`
+          },
+          () => {
+            // Refetch tickets when there are changes
+            fetchCompletedTickets();
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
+      return () => {
+        supabase.removeChannel(channel);
+      };
     };
+
+    setupRealtimeSubscription();
   }, [navigate]);
 
   return (

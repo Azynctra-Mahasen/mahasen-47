@@ -26,8 +26,8 @@ export function ProductsSection() {
       setLoading(true);
       
       // Get current user
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
         console.error("No active session");
         return;
       }
@@ -35,7 +35,7 @@ export function ProductsSection() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('user_id', sessionData.session.user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
