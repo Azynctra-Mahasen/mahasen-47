@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,9 +30,9 @@ export const useProfile = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        // Get current session - fix type error with simpler approach
-        const sessionResult = await supabase.auth.getSession();
-        const session = sessionResult.data.session;
+        // Fix type error by using a simpler approach to get session
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
         
         if (!session) {
           navigate("/login");

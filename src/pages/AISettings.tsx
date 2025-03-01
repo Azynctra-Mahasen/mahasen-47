@@ -28,9 +28,9 @@ const AISettings = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Fix the TypeScript error by using a different approach to get session
-        const sessionResult = await supabase.auth.getSession();
-        const session = sessionResult.data.session;
+        // Fix type error by using a simpler approach to get session
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
         
         if (!session) {
           navigate("/login");

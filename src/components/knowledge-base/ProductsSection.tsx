@@ -25,23 +25,23 @@ export function ProductsSection() {
     try {
       setLoading(true);
       
-      // Get current user session without using nested destructuring
-      const sessionResult = await supabase.auth.getSession();
-      const session = sessionResult.data.session;
+      // Fix type error by using a simpler approach to get session
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
       
       if (!session) {
         console.error("No active session");
         return;
       }
 
-      const { data, error } = await supabase
+      const { data: productsData, error } = await supabase
         .from('products')
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setProducts(data || []);
+      setProducts(productsData || []);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');
