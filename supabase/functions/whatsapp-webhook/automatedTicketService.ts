@@ -1,167 +1,89 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { Database } from "../_shared/database.types.ts";
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-);
-
-interface IntentAnalysis {
-  intent: string;
-  confidence: number;
-  requires_escalation: boolean;
-  escalation_reason: string | null;
-  detected_entities: {
-    product_mentions: string[];
-    issue_type: string | null;
-    urgency_level: 'low' | 'medium' | 'high';
-    order_info?: {
-      product: string;
-      quantity: number;
-      state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING' | 'COMPLETED';
-      confirmed: boolean;
-    };
-  };
+export interface TicketData {
+  platform: "whatsapp" | "facebook" | "instagram" | "telegram";
+  type: string;
+  title: string;
+  body: string;
+  customer_name: string;
+  status: "New" | "In Progress" | "Resolved" | "Closed";
+  priority?: "LOW" | "MEDIUM" | "HIGH";
+  assigned_to?: string;
+  context?: string;
+  intent_type?: string;
+  confidence_score?: number;
+  conversation_id?: string;
+  product_info?: any;
+  whatsapp_message_id?: string;
 }
 
-interface AutomatedTicketParams {
-  messageId: string;
-  conversationId: string;
-  analysis: IntentAnalysis;
-  customerName: string;
-  platform: 'whatsapp' | 'facebook' | 'instagram';
-  messageContent: string;
-  context: string;
-  whatsappMessageId?: string;
-}
-
-export class AutomatedTicketService {
-  static async generateTicket(params: AutomatedTicketParams) {
-    console.log('Starting ticket generation with params:', params);
-    
-    const shouldCreateTicket = this.evaluateTicketCreationCriteria(params.analysis);
-    console.log('Ticket creation criteria met:', shouldCreateTicket);
-    
-    if (shouldCreateTicket) {
-      const ticketData = {
-        title: this.generateTicketTitle(params.analysis),
-        customer_name: params.customerName,
-        platform: params.platform,
-        type: params.analysis.detected_entities?.issue_type || "ORDER",
-        body: params.messageContent,
-        conversation_id: params.conversationId,
-        whatsapp_message_id: params.whatsappMessageId, // Using the correct column name
-        intent_type: this.determineTicketType(params.analysis),
-        context: params.context,
-        confidence_score: params.analysis.confidence,
-        escalation_reason: params.analysis.escalation_reason || undefined,
-        priority: this.determinePriority(params.analysis),
-        status: 'New'
-      };
-
-      console.log('Attempting to create ticket with data:', ticketData);
-
-      const { data: ticket, error } = await supabase
-        .from('tickets')
-        .insert(ticketData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating ticket:', error);
-        throw error;
-      }
-
-      // If the ticket is created successfully and it's a WhatsApp message, create the ticket_messages association
-      if (ticket && params.whatsappMessageId) {
-        const { error: messageError } = await supabase
-          .from('ticket_messages')
-          .insert({
-            ticket_id: ticket.id,
-            message_id: params.messageId,
-            created_at: new Date().toISOString()
-          });
-
-        if (messageError) {
-          console.error('Error creating ticket_message association:', messageError);
-        }
-      }
-
-      console.log('Successfully created ticket:', ticket);
-      return ticket;
-    }
-    
-    return null;
-  }
-
-  private static evaluateTicketCreationCriteria(analysis: IntentAnalysis): boolean {
-    // Check for order placement with confirmation
-    if (analysis.intent === 'ORDER_PLACEMENT' && 
-        analysis.detected_entities.order_info?.state === 'PROCESSING' && 
-        analysis.detected_entities.order_info?.confirmed) {
-      return true;
-    }
-
-    // Keep existing criteria
-    return (
-      analysis.requires_escalation ||
-      analysis.intent === 'HUMAN_AGENT_REQUEST' ||
-      (analysis.intent === 'SUPPORT_REQUEST' && 
-       analysis.detected_entities?.urgency_level === 'high')
+export async function createNewTicket(
+  supabase: SupabaseClient<Database>,
+  ticketData: TicketData,
+  userId: string // Added userId parameter
+) {
+  try {
+    // Get the next ticket ID sequence
+    const { data: seqData, error: seqError } = await supabase.rpc(
+      "next_ticket_id"
     );
-  }
 
-  private static determinePriority(analysis: IntentAnalysis): 'LOW' | 'MEDIUM' | 'HIGH' {
-    // Orders always get HIGH priority
-    if (analysis.intent === 'ORDER_PLACEMENT' && 
-        analysis.detected_entities.order_info?.confirmed) {
-      return 'HIGH';
-    }
-    
-    if (analysis.intent === 'HUMAN_AGENT_REQUEST' || 
-        analysis.detected_entities?.urgency_level === 'high') {
-      return 'HIGH';
-    }
-    
-    if (analysis.detected_entities?.urgency_level === 'medium') {
-      return 'MEDIUM';
-    }
-    
-    return 'LOW';
-  }
-
-  private static determineTicketType(analysis: IntentAnalysis): string {
-    if (analysis.intent === 'ORDER_PLACEMENT' && 
-        analysis.detected_entities.order_info?.confirmed) {
-      return 'ORDER';
+    if (seqError) {
+      console.error("Error getting next ticket ID:", seqError);
+      throw seqError;
     }
 
-    switch (analysis.intent) {
-      case 'ORDER_PLACEMENT':
-        return 'ORDER';
-      case 'HUMAN_AGENT_REQUEST':
-        return 'REQUEST';
-      default:
-        return 'SUPPORT';
-    }
-  }
+    const ticketId = seqData;
 
-  private static generateTicketTitle(analysis: IntentAnalysis): string {
-    if (analysis.intent === 'ORDER_PLACEMENT' && 
-        analysis.detected_entities.order_info?.confirmed) {
-      const { product, quantity } = analysis.detected_entities.order_info;
-      return `Order: ${product} (Qty: ${quantity})`;
-    }
+    // Create the ticket with the user_id
+    const { data: ticketResult, error: ticketError } = await supabase
+      .from("tickets")
+      .insert({
+        id: ticketId,
+        ...ticketData,
+        user_id: userId, // Set the user_id for the ticket
+      })
+      .select()
+      .single();
 
-    if (analysis.intent === 'HUMAN_AGENT_REQUEST') {
-      return 'Human Agent Request';
+    if (ticketError) {
+      console.error("Error creating ticket:", ticketError);
+      throw ticketError;
     }
 
-    const issueType = analysis.detected_entities?.issue_type;
-    if (issueType) {
-      return `${issueType.charAt(0).toUpperCase() + issueType.slice(1)} Support Request`;
+    console.log("Created ticket:", ticketResult);
+
+    // If a WhatsApp message ID is provided, create a link in ticket_messages
+    if (ticketData.whatsapp_message_id) {
+      const { error: linkError } = await supabase.from("ticket_messages").insert({
+        ticket_id: ticketId,
+        message_id: ticketData.whatsapp_message_id,
+      });
+
+      if (linkError) {
+        console.error("Error linking message to ticket:", linkError);
+        // Don't throw here to avoid failing the entire process
+      }
     }
 
-    return 'Support Request';
+    // Create a history entry for the ticket creation
+    const { error: historyError } = await supabase.from("ticket_history").insert({
+      ticket_id: ticketId,
+      action: "Ticket Created",
+      new_status: ticketData.status,
+      changed_by: "System",
+    });
+
+    if (historyError) {
+      console.error("Error creating ticket history:", historyError);
+      // Don't throw here to avoid failing the entire process
+    }
+
+    return ticketResult;
+  } catch (error) {
+    console.error("Exception in createNewTicket:", error);
+    throw error;
   }
 }

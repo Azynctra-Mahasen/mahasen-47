@@ -1,118 +1,130 @@
 
-import { createTicket, linkMessageToTicket, saveMessage, updateTicket } from "../database.ts";
-import { formatKnowledgeBaseContext, searchKnowledgeBase } from "./knowledge-base.ts";
-import { MessageContext } from "../message-processor.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { Database } from "../../_shared/database.types.ts";
+import { MessagingParams, sendWhatsAppMessage } from "../whatsapp.ts";
+import { createNewTicket } from "../automatedTicketService.ts";
 
 export async function processOrderIntent(
+  supabase: SupabaseClient<Database>,
+  conversationId: string,
+  messageId: string,
   messageContent: string,
-  intentData: any,
-  context: MessageContext,
-  aiSettings: any
+  senderNumber: string,
+  senderName: string,
+  messagingParams: MessagingParams,
+  userId: string // Added userId parameter
 ) {
   try {
-    console.log("Processing order intent");
+    // Parse the order details from the message
+    const { productName, quantity } = extractOrderDetails(messageContent);
 
-    // Check if this is a confirmation message
-    const isConfirmation = isOrderConfirmation(messageContent);
-    
-    if (isConfirmation) {
-      console.log("Order confirmation detected");
-      
-      // Create an order ticket
-      const ticket = await createTicket(
-        {
-          title: `Order from ${context.userName}`,
-          body: messageContent,
-          customerName: context.userName,
-          platform: "whatsapp",
-          type: "ORDER",
-          status: "New",
-          conversationId: context.conversationId,
-          intentType: "ORDER",
-          priority: "HIGH",
-          productInfo: intentData.productInfo || {}
-        },
-        context.userId // Add user_id to ticket creation
+    if (!productName || !quantity) {
+      // If we couldn't extract both product and quantity, ask for more information
+      await sendWhatsAppMessage(
+        messagingParams,
+        senderNumber,
+        "I'd like to help you place an order. Could you please specify the product name and quantity you want to order?"
       );
-
-      // Link the message to the ticket
-      await linkMessageToTicket(ticket.id, context.messageId);
-
-      // Create a confirmation message
-      const confirmationText = `Your Order for ${intentData.productInfo?.product || "product"} for ${intentData.productInfo?.quantity || "1"} is placed successfully. Order Number is ${ticket.id}.`;
       
-      // Update the ticket with confirmation message ID
-      await updateTicket(
-        ticket.id, 
-        { 
-          order_status: "confirmed",
-          product_info: {
-            ...intentData.productInfo,
-            order_number: ticket.id,
-            status: "confirmed"
-          }
-        },
-        context.userId // Add user_id for ticket update
-      );
-
-      return {
-        responseText: confirmationText,
-        intentData: {
-          ...intentData,
-          type: "ORDER_CONFIRMATION"
-        }
-      };
-    } else {
-      // Determine if we need product or quantity information
-      const productInfo = intentData.productInfo || {};
-      let responseText = "";
-      let updatedIntentData = intentData;
-
-      // Initialize Supabase AI Session for embeddings
-      const supabaseAISession = new Supabase.ai.Session('gte-small');
-      console.log('Generating embedding for order query...');
-      
-      const embedding = await supabaseAISession.run(messageContent, {
-        mean_pool: true,
-        normalize: true,
+      // Store this response in the database
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        content: "I'd like to help you place an order. Could you please specify the product name and quantity you want to order?",
+        status: "sent",
+        sender_number: messagingParams.phoneNumberId,
+        sender_name: "AI Assistant",
+        user_id: userId, // Set the user_id for the response message
       });
-
-      // Search knowledge base with user_id filter
-      const searchResults = await searchKnowledgeBase(embedding, context.userId);
-      console.log(`Knowledge base search returned ${searchResults.length} results for user ${context.userId}`);
-
-      // Format knowledge base context
-      const knowledgeBaseContext = await formatKnowledgeBaseContext(searchResults);
-
-      if (!productInfo.product) {
-        responseText = "Please specify which product you would like to order.";
-      } else if (!productInfo.quantity) {
-        responseText = `How many ${productInfo.product} would you like to order?`;
-      } else {
-        // We have both product and quantity, ask for confirmation
-        responseText = `Please confirm your order:\n- Product: ${productInfo.product}\n- Quantity: ${productInfo.quantity}\n\nType "Yes" or "Ow" or "ඔව්" to place the order.`;
-      }
-
-      return {
-        responseText,
-        intentData: updatedIntentData
-      };
+      
+      return;
     }
+
+    // Create an order confirmation message
+    const confirmationMessage = `Would you like to place an order for ${quantity} ${productName}? Please reply with "Yes", "Ow", or "ඔව්" to confirm your order.`;
+    
+    // Send the confirmation message
+    await sendWhatsAppMessage(messagingParams, senderNumber, confirmationMessage);
+    
+    // Store the confirmation message and order details in the database
+    const { data: confirmationData, error: confirmationError } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        content: confirmationMessage,
+        status: "sent",
+        sender_number: messagingParams.phoneNumberId,
+        sender_name: "AI Assistant",
+        order_info: { productName, quantity, status: "awaiting_confirmation" },
+        user_id: userId, // Set the user_id
+      })
+      .select("id")
+      .single();
+      
+    if (confirmationError) {
+      console.error("Error storing confirmation message:", confirmationError);
+      throw confirmationError;
+    }
+    
+    // Create a pending order ticket
+    await createNewTicket(
+      supabase,
+      {
+        platform: "whatsapp",
+        type: "Order",
+        title: `Order for ${productName}`,
+        body: `Customer wants to order ${quantity} ${productName}.`,
+        customer_name: senderName,
+        status: "New",
+        priority: "HIGH",
+        product_info: { productName, quantity },
+        confirmation_message_id: confirmationData.id,
+        whatsapp_message_id: messageId,
+        conversation_id: conversationId,
+      },
+      userId // Pass userId to ensure the ticket is created for the correct user
+    );
+    
   } catch (error) {
     console.error("Error processing order intent:", error);
-    return {
-      responseText: "I apologize, but I'm having trouble processing your order right now. Please try again later.",
-      intentData: {
-        type: "ERROR",
-        errorMessage: error.message
-      }
-    };
+    // Log the error
+    await supabase.from("system_logs").insert({
+      component: "order-processor",
+      log_level: "ERROR",
+      message: `Error processing order: ${error.message}`,
+      metadata: { error: error.toString() },
+    });
+    
+    // Send an error message
+    await sendWhatsAppMessage(
+      messagingParams,
+      senderNumber,
+      "I'm sorry, but I encountered an error processing your order. Please try again later."
+    );
   }
 }
 
-function isOrderConfirmation(message: string) {
-  const confirmationKeywords = ["yes", "ow", "ඔව්", "ok", "confirm"];
-  const lowerMessage = message.toLowerCase().trim();
+// Helper function to extract order details
+function extractOrderDetails(message: string) {
+  const lowerMessage = message.toLowerCase();
   
-  return confirmationKeywords.some(keyword => lowerMessage === keyword);
+  // Very basic extraction logic (this can be improved with NLP)
+  let productName = null;
+  let quantity = null;
+  
+  // Look for product names (this is a simplistic approach)
+  const productWords = ["t-shirt", "shirt", "hat", "cap", "book", "mug", "pen"];
+  for (const product of productWords) {
+    if (lowerMessage.includes(product)) {
+      productName = product;
+      break;
+    }
+  }
+  
+  // Look for quantity
+  const quantityMatch = lowerMessage.match(/(\d+)/);
+  if (quantityMatch) {
+    quantity = parseInt(quantityMatch[1]);
+  }
+  
+  return { productName, quantity };
 }
