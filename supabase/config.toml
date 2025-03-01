@@ -27,18 +27,14 @@ enable_signup = true
 
 [storage]
 
-[realtime]
-postgres_changes.channel_defaults = ["*"]
-enable = true
-
-[edge_functions]
-[edge_functions.generate-embedding]
+[functions]
+[functions.generate-embedding]
 verify_jwt = true
-[edge_functions.generate-file-embedding]
+[functions.generate-file-embedding]
 verify_jwt = true
-[edge_functions.messenger-webhook]
+[functions.messenger-webhook]
 verify_jwt = true
-[edge_functions.send-whatsapp]
+[functions.send-whatsapp]
 verify_jwt = true
-[edge_functions.whatsapp-webhook]
+[functions.whatsapp-webhook]
 verify_jwt = false
