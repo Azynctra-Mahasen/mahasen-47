@@ -28,9 +28,9 @@ const AISettings = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Fix the TypeScript error by avoiding nested destructuring
-        const sessionResponse = await supabase.auth.getSession();
-        const session = sessionResponse.data.session;
+        // Fix the TypeScript error by using a different approach to get session
+        const sessionResult = await supabase.auth.getSession();
+        const session = sessionResult.data.session;
         
         if (!session) {
           navigate("/login");

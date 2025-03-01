@@ -25,9 +25,9 @@ export function ProductsSection() {
     try {
       setLoading(true);
       
-      // Get current user - fix the TypeScript error by avoiding nested destructuring
-      const sessionResponse = await supabase.auth.getSession();
-      const session = sessionResponse.data.session;
+      // Get current user session without using nested destructuring
+      const sessionResult = await supabase.auth.getSession();
+      const session = sessionResult.data.session;
       
       if (!session) {
         console.error("No active session");

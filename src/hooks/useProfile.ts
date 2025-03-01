@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,13 +29,10 @@ export const useProfile = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        // Get current session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // Get current session - fix type error with simpler approach
+        const sessionResult = await supabase.auth.getSession();
+        const session = sessionResult.data.session;
         
-        if (sessionError) {
-          throw new Error("Error fetching session: " + sessionError.message);
-        }
-
         if (!session) {
           navigate("/login");
           return;
