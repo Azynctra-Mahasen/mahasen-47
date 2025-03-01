@@ -1,59 +1,90 @@
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Database } from '../_shared/database.types.ts';
+import { corsHeaders } from '../_shared/cors.ts';
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-export interface AuthInfo {
-  userId: string;
-  accessToken: string;
-  verifyToken: string;
-  phoneId: string;
+// Initialize the Supabase client with the service role key
+export async function createSupabaseClient() {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  
+  return createClient<Database>(
+    supabaseUrl,
+    supabaseServiceKey
+  );
 }
 
-export async function getWhatsAppAuth(phoneNumberId: string): Promise<AuthInfo | null> {
+// Finds the user who owns the WhatsApp phone ID from the incoming webhook
+export async function findUserByWhatsAppPhoneId(phoneNumberId: string): Promise<string | null> {
   try {
-    console.log(`Looking up auth for phone_number_id: ${phoneNumberId}`);
+    const supabase = await createSupabaseClient();
     
-    // Clean up the phone number ID by removing any whitespace
+    // Trim whitespace from the phone number ID for comparison
     const cleanPhoneNumberId = phoneNumberId.trim();
     
-    // Query platform_secrets table to find the matching user
-    const { data: secrets, error } = await supabase
+    // First try an exact match
+    let { data: secrets, error } = await supabase
       .from('platform_secrets')
-      .select('user_id, whatsapp_access_token, whatsapp_verify_token, whatsapp_phone_id');
+      .select('user_id, whatsapp_phone_id')
+      .eq('whatsapp_phone_id', cleanPhoneNumberId);
     
     if (error) {
-      console.error('Error fetching platform secrets:', error);
+      console.error("Error finding user by WhatsApp phone ID:", error.message);
       return null;
     }
     
-    console.log(`Available platform_secrets: ${JSON.stringify(secrets)}`);
-    
-    // Find the user with the matching phone ID
-    const matchedSecret = secrets.find(secret => {
-      // Clean up stored phone ID by trimming whitespace
-      const storedPhoneId = secret.whatsapp_phone_id.trim();
-      
-      // Check for exact match
-      return storedPhoneId === cleanPhoneNumberId;
-    });
-    
-    if (matchedSecret) {
-      console.log(`Found matching user: ${matchedSecret.user_id} for phone ID: ${cleanPhoneNumberId}`);
-      return {
-        userId: matchedSecret.user_id,
-        accessToken: matchedSecret.whatsapp_access_token,
-        verifyToken: matchedSecret.whatsapp_verify_token,
-        phoneId: matchedSecret.whatsapp_phone_id.trim(),
-      };
+    // If exact match found, return the user ID
+    if (secrets && secrets.length > 0) {
+      return secrets[0].user_id;
     }
     
-    console.log(`No exact match found for phone ID: ${cleanPhoneNumberId}`);
+    // If no exact match, try with trimmed values from the database
+    // This handles cases where phone IDs might have leading/trailing spaces stored
+    const { data: allSecrets, error: allSecretsError } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_phone_id');
+    
+    if (allSecretsError) {
+      console.error("Error fetching all platform secrets:", allSecretsError.message);
+      return null;
+    }
+    
+    // Find a match with trimmed values
+    const matchingSecret = allSecrets?.find(secret => 
+      secret.whatsapp_phone_id && secret.whatsapp_phone_id.trim() === cleanPhoneNumberId
+    );
+    
+    if (matchingSecret) {
+      return matchingSecret.user_id;
+    }
+    
+    console.error(`No user found for WhatsApp phone ID: ${phoneNumberId}`);
     return null;
   } catch (error) {
-    console.error('Error in getWhatsAppAuth:', error);
+    console.error("Error in findUserByWhatsAppPhoneId:", error);
+    return null;
+  }
+}
+
+// Get platform secrets for a user
+export async function getUserPlatformSecrets(userId: string) {
+  try {
+    const supabase = await createSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('platform_secrets')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      console.error("Error fetching platform secrets:", error.message);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Error in getUserPlatformSecrets:", error);
     return null;
   }
 }
