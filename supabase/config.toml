@@ -76,7 +76,6 @@ enabled = false
 port = 54327
 vector_port = 54328
 
-# Setup BigQuery support
 [analytics.big_query]
 enabled = false
 # The location of the BigQuery dataset.
