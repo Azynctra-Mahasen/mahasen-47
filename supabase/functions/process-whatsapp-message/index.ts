@@ -19,29 +19,18 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Parse the request body
-    const { message, conversation_id, sender_number, sender_name } = await req.json();
-
-    // Save the message to the database
-    const messageRecord = {
-      content: message,
-      conversation_id: conversation_id,
-      sender_number: sender_number,
-      sender_name: sender_name,
-      status: "received",
-    };
-
-    const { data: savedMessage, error: saveError } = await supabase
-      .from('messages')
-      .insert(messageRecord)
-      .select()
-      .single();
-
-    if (saveError) {
-      console.error("Error saving message:", saveError);
-      throw saveError;
+    const { 
+      message, 
+      conversation_id, 
+      sender_number, 
+      sender_name,
+      message_id 
+    } = await req.json();
+    
+    // Validate the required fields
+    if (!message || !conversation_id || !sender_number) {
+      throw new Error("Missing required fields");
     }
-
-    console.log(`Message saved with ID: ${savedMessage.id}`);
 
     // Find the conversation to get the user ID
     const { data: conversationData, error: conversationError } = await supabase
@@ -60,7 +49,7 @@ serve(async (req) => {
     // Use user_id to get user's WhatsApp phone ID from platform_secrets
     const { data: userSecrets, error: secretsError } = await supabase
       .from('platform_secrets')
-      .select('whatsapp_phone_id')
+      .select('whatsapp_phone_id, whatsapp_access_token')
       .eq('user_id', userId)
       .single();
 
@@ -70,6 +59,12 @@ serve(async (req) => {
     }
 
     const phoneNumberId = userSecrets.whatsapp_phone_id;
+    const accessToken = userSecrets.whatsapp_access_token;
+    
+    if (!phoneNumberId || !accessToken) {
+      throw new Error("Missing WhatsApp configuration");
+    }
+    
     console.log(`Processing message for user: ${userId} with phone ID: ${phoneNumberId}`);
 
     // Try to fetch knowledge base data with proper query embedding
@@ -121,12 +116,81 @@ serve(async (req) => {
 
     console.log("Found relevant matches:", relevantMatches);
 
-    // Now, instead of calling the generate-ai-response function, we'll handle the response here
-    // This is a simple response for now - in a real implementation, you might want to 
-    // incorporate AI processing with the relevant matches
-    const reply = relevantMatches.length > 0 
-      ? `I found some information that might help: ${relevantMatches.map(m => m.content.substring(0, 100) + '...').join('\n\n')}`
-      : "Thank you for your message. Our team will get back to you soon.";
+    // Handle order creation if intent detected
+    let orderIntent = false;
+    let productName = "";
+    let quantity = 0;
+    
+    // Simple intent detection (in a real scenario, use a more sophisticated approach)
+    const lowerMessage = message.toLowerCase();
+    if (
+      lowerMessage.includes("order") || 
+      lowerMessage.includes("buy") || 
+      lowerMessage.includes("purchase") ||
+      lowerMessage.includes("get me")
+    ) {
+      orderIntent = true;
+      
+      // Extract product name (simplified)
+      const products = await supabase.from('products').select('title').eq('user_id', userId);
+      if (!products.error && products.data) {
+        for (const product of products.data) {
+          if (lowerMessage.includes(product.title.toLowerCase())) {
+            productName = product.title;
+            break;
+          }
+        }
+      }
+      
+      // Extract quantity (simplified)
+      const quantityMatch = lowerMessage.match(/(\d+)/);
+      if (quantityMatch) {
+        quantity = parseInt(quantityMatch[1]);
+      }
+    }
+    
+    // Generate reply based on intent and matches
+    let reply = "";
+    
+    if (orderIntent && productName && quantity > 0) {
+      reply = `Your Order for ${productName} for ${quantity} is placed successfully. Order Number is ORD-${Date.now().toString().substring(7)}.`;
+      
+      // Create ticket for the order
+      try {
+        const { data: ticketData, error: ticketError } = await supabase
+          .from('tickets')
+          .insert({
+            title: `Order: ${productName}`,
+            body: `Customer ordered ${quantity} of ${productName}`,
+            type: "Order",
+            status: "New",
+            priority: "HIGH",
+            platform: "whatsapp",
+            customer_name: sender_name,
+            conversation_id: conversation_id,
+            user_id: userId,
+            product_info: { product: productName, quantity: quantity }
+          })
+          .select()
+          .single();
+          
+        if (ticketError) {
+          console.error("Error creating ticket:", ticketError);
+        } else {
+          console.log(`Created ticket ID: ${ticketData.id}`);
+        }
+      } catch (ticketError) {
+        console.error("Failed to create ticket:", ticketError);
+      }
+    } else if (orderIntent) {
+      reply = "I'd like to help you place an order. Could you please specify the product name and quantity?";
+    } else if (relevantMatches.length > 0) {
+      // Use knowledge base for response
+      reply = `I found some information that might help: ${relevantMatches.map(m => m.content.substring(0, 100) + '...').join('\n\n')}`;
+    } else {
+      // Default response
+      reply = "Thank you for your message. Our team will get back to you soon.";
+    }
 
     // Send response back to WhatsApp
     try {
@@ -136,11 +200,28 @@ serve(async (req) => {
           message: reply,
           type: 'text',
           phoneId: phoneNumberId,
+          accessToken: accessToken
         }
       });
 
       if (messageResponse.error) {
         throw messageResponse.error;
+      }
+      
+      // Save the reply message to the database
+      const { error: replyError } = await supabase
+        .from('messages')
+        .insert({
+          content: reply,
+          conversation_id: conversation_id,
+          sender_number: phoneNumberId,
+          sender_name: "System",
+          status: "sent",
+          user_id: userId
+        });
+        
+      if (replyError) {
+        console.error("Error saving reply message:", replyError);
       }
 
       return new Response(
@@ -157,7 +238,7 @@ serve(async (req) => {
         }
       );
     } catch (error) {
-      console.error("Error generating AI response:", error);
+      console.error("Error sending WhatsApp response:", error);
       throw error;
     }
   } catch (error) {
