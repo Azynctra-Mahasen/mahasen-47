@@ -76,9 +76,6 @@ enabled = false
 port = 54327
 vector_port = 54328
 
-# This section is completely removed and simplified
-# No more big_query section to avoid the parsing error
-
 [functions]
 [functions.send-whatsapp]
 verify_jwt = true
@@ -89,8 +86,6 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 verify_jwt = false
 [functions.messenger-webhook]
-verify_jwt = false
-[functions.generate-ai-response]
 verify_jwt = false
 [functions.delete-file]
 verify_jwt = true
