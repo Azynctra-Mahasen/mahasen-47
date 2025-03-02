@@ -22,9 +22,9 @@ serve(async (req) => {
       );
     }
 
-    // Using simple vector for demonstration - replace with actual embedding generation in production
-    // This creates a 1536-dimensional vector with random values, typical for OpenAI embeddings
-    const dummyEmbedding = Array(1536).fill(0).map(() => Math.random() * 2 - 1);
+    // Using 384-dimensional vector instead of 1536
+    // This creates a 384-dimensional vector with random values
+    const dummyEmbedding = Array(384).fill(0).map(() => Math.random() * 2 - 1);
     
     // Return the embedding as a proper JSON array
     return new Response(
