@@ -87,5 +87,3 @@ verify_jwt = false
 verify_jwt = false
 [functions.messenger-webhook]
 verify_jwt = false
-[functions.delete-file]
-verify_jwt = true
