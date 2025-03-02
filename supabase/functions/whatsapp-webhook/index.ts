@@ -1,185 +1,150 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { processMessage } from "./message-processor.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { getMessagingParams, sendWhatsAppMessage } from "./whatsapp.ts";
-import { handleIntent } from "./services/intent-processor.ts";
-import { Database } from "../_shared/database.types.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
-// Create a Supabase client
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
+  const url = new URL(req.url);
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   try {
-    // We switched from verification to simply returning the challenge
-    // Get the URL params
-    const url = new URL(req.url);
-    const mode = url.searchParams.get("hub.mode");
-    const challenge = url.searchParams.get("hub.challenge");
+    if (req.method === 'GET') {
+      // Handle webhook verification
+      const mode = url.searchParams.get('hub.mode');
+      const verifyToken = url.searchParams.get('hub.verify_token');
+      const challenge = url.searchParams.get('hub.challenge');
 
-    // This is the webhook verification - just return the challenge
-    if (req.method === "GET" && mode === "subscribe") {
-      console.log("Webhook verified with challenge:", challenge);
-      return new Response(challenge, {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "text/plain" },
-      });
-    }
+      if (mode === 'subscribe' && challenge) {
+        console.log('Webhook verification request received');
+        
+        // Get the verify token from query params
+        if (!verifyToken) {
+          throw new Error('Verify token is missing');
+        }
 
-    // Handle the incoming webhook
-    if (req.method === "POST") {
-      // Parse the request body
+        // Find the user who has this verification token
+        const { data: userSecrets, error: secretsError } = await supabase
+          .from('platform_secrets')
+          .select('user_id')
+          .eq('whatsapp_verify_token', verifyToken)
+          .maybeSingle();
+
+        if (secretsError || !userSecrets) {
+          console.error('Error finding user with verify token:', secretsError);
+          throw new Error('Invalid verify token');
+        }
+
+        console.log(`Verification successful for user: ${userSecrets.user_id}`);
+        return new Response(challenge, { headers: corsHeaders });
+      }
+      
+      return new Response('Invalid verification request', { status: 400, headers: corsHeaders });
+    } 
+    
+    else if (req.method === 'POST') {
+      // Handle incoming messages
       const payload = await req.json();
-      console.log("WhatsApp API payload:", JSON.stringify(payload));
+      console.log('WhatsApp API payload:', JSON.stringify(payload));
 
-      // Find the message in the payload
-      const entry = payload.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
-      const metadata = value?.metadata;
-      const phone_number_id = metadata?.phone_number_id;
-      const messages = value?.messages;
+      // Extract phone_number_id from the payload
+      const phoneNumberId = extractPhoneNumberId(payload);
+      
+      if (!phoneNumberId) {
+        throw new Error('Phone number ID not found in payload');
+      }
+      
+      console.log(`Processing message for phone ID: ${phoneNumberId}`);
 
-      // Store webhook event for logging purposes
-      await supabase.from("system_logs").insert({
-        component: "whatsapp-webhook",
-        log_level: "INFO",
-        message: "WhatsApp API payload: " + JSON.stringify(payload),
-      });
+      // Find the user who owns this phone number ID
+      const { data: userInfo, error: userError } = await supabase
+        .from('platform_secrets')
+        .select('user_id')
+        .eq('whatsapp_phone_id', phoneNumberId)
+        .maybeSingle();
 
-      // If there are no messages, return OK
-      if (!messages || messages.length === 0) {
-        console.log("No messages in webhook");
-        return new Response("OK", {
-          status: 200,
-          headers: corsHeaders,
-        });
+      if (userError || !userInfo) {
+        console.error('Error finding user with phone ID:', userError);
+        throw new Error(`No user found for phone ID: ${phoneNumberId}`);
       }
 
-      // IMPORTANT CHANGE: Find the user_id based on the phone_number_id
-      const { data: userIdData, error: userIdError } = await supabase
-        .rpc('get_user_by_phone_number_id', { phone_id: phone_number_id })
-        .single();
+      const userId = userInfo.user_id;
+      console.log(`Found user ID: ${userId} for phone ID: ${phoneNumberId}`);
 
-      if (userIdError || !userIdData) {
-        console.error("Error finding user for phone_number_id:", phone_number_id, userIdError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: "User not found for this WhatsApp account",
-          }),
-          {
-            status: 404,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Process the message using AI function with the correct user context
+      const { error: processingError } = await supabase.functions.invoke(
+        'process-whatsapp-message',
+        {
+          body: { 
+            payload,
+            userId,
+            phoneNumberId
           }
-        );
-      }
-
-      const userId = userIdData;
-      console.log(`Processing message for user_id: ${userId}`);
-
-      // Process each message in the webhook
-      for (const message of messages) {
-        if (message.type !== "text") {
-          console.log(`Skipping non-text message of type: ${message.type}`);
-          continue;
         }
+      );
 
-        try {
-          // Get messaging parameters
-          const messagingParams = await getMessagingParams(
-            supabase,
-            phone_number_id,
-            userId
-          );
-
-          if (!messagingParams) {
-            console.error("Could not get messaging parameters");
-            continue;
-          }
-
-          // Extract message data
-          const from = message.from;
-          const messageId = message.id;
-          const messageBody = message.text.body;
-          const contactName = value.contacts?.[0]?.profile?.name || "Unknown";
-
-          // Process the message - now includes userId parameter
-          const { conversationId, dbMessageId } = await processMessage(
-            supabase,
-            {
-              from,
-              contactName,
-              messageId,
-              messageBody,
-              phoneNumberId: phone_number_id,
-              userId
-            }
-          );
-
-          // Handle intent - pass userId for proper context and security
-          await handleIntent(
-            supabase,
-            conversationId,
-            dbMessageId,
-            messageBody,
-            from,
-            contactName,
-            messagingParams,
-            userId
-          );
-        } catch (error) {
-          console.error("Error processing message:", error);
-          await supabase.from("webhook_errors").insert({
-            error_type: "message_processing",
-            message: `Error processing message: ${error.message}`,
-            details: { error: error.toString() },
-          });
-        }
+      if (processingError) {
+        console.error('Error processing message:', processingError);
+        throw processingError;
       }
 
       return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Return 405 for unsupported methods
-    return new Response("Method not allowed", {
-      status: 405,
-      headers: corsHeaders,
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+  } catch (err) {
+    console.error('Error in whatsapp-webhook:', err);
+    
+    // Log detailed error information
+    await supabase
+      .from('webhook_errors')
+      .insert({
+        error_type: 'WhatsApp Webhook Error',
+        message: err.message,
+        details: {
+          stack: err.stack,
+          url: req.url,
+          method: req.method
+        }
+      });
+    
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
-    console.error("Webhook error:", error);
-
-    // Log the error in the database
-    try {
-      await supabase.from("webhook_errors").insert({
-        error_type: "webhook_processing",
-        message: `Webhook error: ${error.message}`,
-        details: { error: error.toString() },
-      });
-    } catch (logError) {
-      console.error("Failed to log error:", logError);
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Internal server error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
   }
 });
+
+// Helper function to extract phone_number_id from WhatsApp payload
+function extractPhoneNumberId(payload: any): string | null {
+  try {
+    // Navigate through the payload structure to find phone_number_id
+    if (payload.object === 'whatsapp_business_account' && 
+        payload.entry && 
+        payload.entry.length > 0 && 
+        payload.entry[0].changes && 
+        payload.entry[0].changes.length > 0 && 
+        payload.entry[0].changes[0].value && 
+        payload.entry[0].changes[0].value.metadata && 
+        payload.entry[0].changes[0].value.metadata.phone_number_id) {
+      
+      return payload.entry[0].changes[0].value.metadata.phone_number_id;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error extracting phone_number_id:', error);
+    return null;
+  }
+}
