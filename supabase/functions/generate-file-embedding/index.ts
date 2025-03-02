@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -13,32 +12,49 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Received request to generate file embedding');
+    
+    // Extract input from request body
     const { text } = await req.json();
     
-    if (!text) {
-      return new Response(
-        JSON.stringify({ error: "No text provided" }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!text || typeof text !== 'string') {
+      throw new Error('Input text is required and must be a string');
     }
 
-    // Using 384-dimensional vector instead of 1536
-    // This creates a 384-dimensional vector with random values
-    const dummyEmbedding = Array(384).fill(0).map(() => Math.random() * 2 - 1);
-    
-    // Return the embedding as a proper JSON array
+    console.log('Initializing embedding session for file');
+    const session = new Supabase.ai.Session('gte-small');
+
+    console.log('Generating embedding for file content');
+    const embedding = await session.run(text, {
+      mean_pool: true,
+      normalize: true,
+    });
+
+    console.log('Successfully generated file embedding');
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        embedding: dummyEmbedding
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ embedding }),
+      { 
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
     );
   } catch (error) {
-    console.error("Error generating embedding:", error);
+    console.error('Error in generate-file-embedding function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        error: error.message,
+        details: 'Failed to generate file embedding'
+      }),
+      { 
+        status: 500,
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
     );
   }
 });

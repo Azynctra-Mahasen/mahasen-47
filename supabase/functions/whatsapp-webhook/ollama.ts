@@ -16,8 +16,8 @@ export async function generateAIResponse(message: string, context: any, aiSettin
       normalize: true,
     });
 
-    // Search knowledge base with the embedding and user_id
-    const searchResults = await searchKnowledgeBase(embedding, context.userId);
+    // Search knowledge base with the embedding
+    const searchResults = await searchKnowledgeBase(embedding);
     console.log('Search results:', searchResults);
 
     // Format knowledge base context
@@ -27,8 +27,7 @@ export async function generateAIResponse(message: string, context: any, aiSettin
     // Update context with knowledge base results
     const updatedContext = {
       ...context,
-      knowledgeBase: formattedContext || context.knowledgeBase || '',
-      userId: context.userId // Ensure userId is passed through
+      knowledgeBase: formattedContext || context.knowledgeBase || ''
     };
 
     if (aiSettings.model_name === 'llama-3.3-70b-versatile') {
@@ -72,8 +71,7 @@ async function generateGroqResponse(message: string, context: any, aiSettings: a
       userName: context.userName,
       platform: 'whatsapp',
       messageContent: message,
-      knowledgeBase: context.knowledgeBase,
-      userId: context.userId // Pass userId to ticket creation
+      knowledgeBase: context.knowledgeBase
     });
 
     if (ticketResponse) {
@@ -112,8 +110,7 @@ async function generateGeminiResponse(message: string, context: any, aiSettings:
       userName: context.userName,
       platform: 'whatsapp',
       messageContent: message,
-      knowledgeBase: context.knowledgeBase,
-      userId: context.userId // Pass userId to ticket creation
+      knowledgeBase: context.knowledgeBase
     });
 
     if (ticketResponse) {
