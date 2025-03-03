@@ -14,6 +14,8 @@ export async function getMessagingParams(
   userId: string
 ): Promise<MessagingParams | null> {
   try {
+    console.log(`Getting messaging params for phone ID: ${phoneNumberId} and user ID: ${userId}`);
+    
     // Get the platform secrets for this user and phone ID
     const { data: platformSecret, error } = await supabase
       .from("platform_secrets")
@@ -45,6 +47,8 @@ export async function sendWhatsAppMessage(
 ): Promise<boolean> {
   try {
     const url = `https://graph.facebook.com/v18.0/${params.phoneNumberId}/messages`;
+    console.log(`Sending WhatsApp message to ${recipientNumber}`);
+    
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -70,6 +74,7 @@ export async function sendWhatsAppMessage(
       return false;
     }
 
+    console.log("WhatsApp message sent successfully");
     return true;
   } catch (error) {
     console.error("Exception sending WhatsApp message:", error);
