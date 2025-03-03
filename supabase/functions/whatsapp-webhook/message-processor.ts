@@ -1,88 +1,84 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Database } from "../_shared/database.types.ts";
 
-interface MessageData {
+type MessageParams = {
   from: string;
   contactName: string;
   messageId: string;
   messageBody: string;
   phoneNumberId: string;
-  userId: string;
-}
+  userId: string; // Added userId parameter
+};
 
 export async function processMessage(
-  supabase: ReturnType<typeof createClient<Database>>,
-  messageData: MessageData
+  supabase: SupabaseClient<Database>,
+  params: MessageParams
 ) {
-  const { from, contactName, messageId, messageBody, phoneNumberId, userId } = messageData;
+  const { from, contactName, messageId, messageBody, phoneNumberId, userId } = params;
 
-  try {
-    console.log(`Processing message from ${from} (${contactName}): ${messageBody}`);
+  // First, check if we already have a conversation with this contact
+  const { data: existingConversation, error: conversationError } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("contact_number", from)
+    .eq("user_id", userId) // Filter by user_id
+    .maybeSingle();
 
-    // Find or create conversation
-    let conversationId: string;
-    const { data: existingConversation } = await supabase
+  if (conversationError) {
+    console.error("Error checking for existing conversation:", conversationError);
+    throw conversationError;
+  }
+
+  let conversationId;
+
+  if (existingConversation) {
+    // Use the existing conversation
+    conversationId = existingConversation.id;
+  } else {
+    // Create a new conversation
+    const { data: newConversation, error: newConversationError } = await supabase
       .from("conversations")
-      .select("id")
-      .eq("contact_number", from)
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (existingConversation) {
-      conversationId = existingConversation.id;
-      console.log(`Using existing conversation: ${conversationId}`);
-
-      // Update conversation timestamp
-      await supabase
-        .from("conversations")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", conversationId);
-    } else {
-      console.log(`Creating new conversation for ${from} (${contactName})`);
-      const { data: newConversation, error: conversationError } = await supabase
-        .from("conversations")
-        .insert({
-          contact_number: from,
-          contact_name: contactName,
-          platform: "whatsapp",
-          user_id: userId
-        })
-        .select("id")
-        .single();
-
-      if (conversationError || !newConversation) {
-        throw new Error(`Error creating conversation: ${conversationError?.message || "Unknown error"}`);
-      }
-
-      conversationId = newConversation.id;
-      console.log(`Created new conversation: ${conversationId}`);
-    }
-
-    // Save message to database
-    console.log(`Saving message to database for conversation ${conversationId}`);
-    const { data: dbMessage, error: messageError } = await supabase
-      .from("messages")
       .insert({
-        content: messageBody,
-        conversation_id: conversationId,
-        sender_name: contactName,
-        sender_number: from,
-        status: "received",
-        whatsapp_message_id: messageId,
-        user_id: userId
+        contact_number: from,
+        contact_name: contactName,
+        platform: "whatsapp",
+        ai_enabled: true,
+        user_id: userId, // Set the user_id for new conversations
       })
       .select("id")
       .single();
 
-    if (messageError || !dbMessage) {
-      throw new Error(`Error saving message: ${messageError?.message || "Unknown error"}`);
+    if (newConversationError) {
+      console.error("Error creating new conversation:", newConversationError);
+      throw newConversationError;
     }
 
-    console.log(`Message saved with ID: ${dbMessage.id}`);
-    return { conversationId, dbMessageId: dbMessage.id };
-  } catch (error) {
-    console.error("Error processing message:", error);
-    throw error;
+    conversationId = newConversation.id;
   }
+
+  // Store the message
+  const { data: insertedMessage, error: messageError } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      content: messageBody,
+      status: "received",
+      whatsapp_message_id: messageId,
+      sender_number: from,
+      sender_name: contactName,
+      user_id: userId, // Set the user_id for messages
+    })
+    .select("id")
+    .single();
+
+  if (messageError) {
+    console.error("Error storing message:", messageError);
+    throw messageError;
+  }
+
+  return {
+    conversationId,
+    dbMessageId: insertedMessage.id,
+  };
 }
