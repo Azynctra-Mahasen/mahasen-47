@@ -1,74 +1,146 @@
 
-import { IntentAnalysis } from '../types/intent.ts';
-import { SearchResult } from './knowledge-base.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { Database } from "../../_shared/database.types.ts";
+import { MessagingParams, sendWhatsAppMessage } from "../whatsapp.ts";
+import { createNewTicket } from "../automatedTicketService.ts";
+import { Intent } from "../types/intent.ts";
+import { getAISettings } from "../ai-settings.ts";
+import { generateAIResponse } from "../services/response-processor.ts";
+import { fetchKnowledgeBaseMatches } from "../services/knowledge-base.ts";
+import { processOrderIntent } from "../services/order-processor.ts";
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Process the detected intent
+export async function handleIntent(
+  supabase: SupabaseClient<Database>,
+  conversationId: string,
+  messageId: string,
+  messageContent: string,
+  senderNumber: string,
+  senderName: string,
+  messagingParams: MessagingParams,
+  userId: string // Added userId parameter
+) {
+  try {
+    // Get AI settings for this user
+    const aiSettings = await getAISettings(supabase, userId);
 
-export class IntentProcessor {
-  static async processIntent(message: string, searchResults: SearchResult[]): Promise<IntentAnalysis> {
+    // Simple intent detection (can be replaced with more sophisticated logic)
+    const intent = detectIntent(messageContent);
+    console.log(`Detected intent: ${intent} for message: "${messageContent}"`);
+
+    // Process based on intent
+    switch (intent) {
+      case "order":
+        await processOrderIntent(
+          supabase,
+          conversationId,
+          messageId,
+          messageContent,
+          senderNumber,
+          senderName,
+          messagingParams,
+          userId
+        );
+        break;
+
+      case "support":
+        // Create a support ticket
+        await createNewTicket(
+          supabase,
+          {
+            platform: "whatsapp",
+            type: "Support",
+            title: `Support request from ${senderName}`,
+            body: messageContent,
+            customer_name: senderName,
+            status: "New",
+            priority: "HIGH",
+            context: `Conversation ID: ${conversationId}`,
+            whatsapp_message_id: messageId,
+          },
+          userId // Pass userId to ensure the ticket is created for the correct user
+        );
+
+        // Send acknowledgment
+        await sendWhatsAppMessage(
+          messagingParams,
+          senderNumber,
+          "Thank you for your support request. Our team will get back to you shortly."
+        );
+        break;
+
+      default:
+        // For general inquiries, use AI to generate a response
+        const knowledgeMatches = await fetchKnowledgeBaseMatches(
+          supabase,
+          messageContent,
+          userId // Pass userId to filter knowledge base by user
+        );
+
+        const aiResponse = await generateAIResponse(
+          supabase,
+          conversationId,
+          messageContent,
+          knowledgeMatches,
+          aiSettings,
+          userId // Pass userId for context
+        );
+
+        // Send the AI-generated response
+        await sendWhatsAppMessage(messagingParams, senderNumber, aiResponse);
+
+        // Store the AI response in the database
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          content: aiResponse,
+          status: "sent",
+          sender_number: messagingParams.phoneNumberId,
+          sender_name: "AI Assistant",
+          user_id: userId, // Set the user_id for the AI response message
+        });
+    }
+  } catch (error) {
+    console.error("Error handling intent:", error);
+    // Log the error to the database
+    await supabase.from("system_logs").insert({
+      component: "intent-processor",
+      log_level: "ERROR",
+      message: `Error handling intent: ${error.message}`,
+      metadata: { error: error.toString() },
+    });
+
+    // Try to send an error message to the user
     try {
-      const productResults = searchResults.filter(r => r.source === 'product');
-      
-      // Check if message contains product inquiries
-      const hasProductMentions = productResults.length > 0;
-      const hasPriceInquiry = message.toLowerCase().includes('price') ||
-                             message.toLowerCase().includes('cost') ||
-                             message.toLowerCase().includes('how much');
-      
-      const isProductQuery = hasProductMentions || hasPriceInquiry;
-
-      let intent: IntentAnalysis = {
-        intent: isProductQuery ? 'ORDER_PLACEMENT' : 'GENERAL_QUERY',
-        confidence: isProductQuery ? 0.8 : 0.6,
-        requires_escalation: false,
-        escalation_reason: null,
-        detected_entities: {
-          product_mentions: productResults.map(p => p.metadata?.title || '').filter(Boolean),
-          issue_type: null,
-          urgency_level: 'low',
-          order_info: isProductQuery ? {
-            state: 'COLLECTING_INFO',
-            products: productResults.map(p => ({
-              title: p.metadata?.title,
-              price: p.metadata?.price,
-              discount: p.metadata?.discounts
-            }))
-          } : null
-        }
-      };
-
-      // Increase confidence for exact product matches
-      if (hasProductMentions) {
-        intent.confidence = 0.9;
-      }
-
-      return intent;
-    } catch (error) {
-      console.error('Error in intent processing:', error);
-      throw error;
+      await sendWhatsAppMessage(
+        messagingParams,
+        senderNumber,
+        "I'm sorry, but I encountered an error processing your request. Please try again later."
+      );
+    } catch (sendError) {
+      console.error("Error sending error message:", sendError);
     }
   }
+}
 
-  static validateIntentStructure(response: any): boolean {
-    return (
-      response &&
-      typeof response.intent === 'string' &&
-      typeof response.confidence === 'number' &&
-      typeof response.requires_escalation === 'boolean' &&
-      response.detected_entities &&
-      typeof response.response === 'string'
-    );
+// Simple intent detection function (can be expanded)
+function detectIntent(message: string): Intent {
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    lowerMessage.includes("buy") ||
+    lowerMessage.includes("order") ||
+    lowerMessage.includes("purchase") ||
+    lowerMessage.includes("product")
+  ) {
+    return "order";
+  } else if (
+    lowerMessage.includes("help") ||
+    lowerMessage.includes("support") ||
+    lowerMessage.includes("issue") ||
+    lowerMessage.includes("problem")
+  ) {
+    return "support";
   }
 
-  static evaluateEscalationNeeds(analysis: any): boolean {
-    return (
-      analysis.requires_escalation ||
-      analysis.intent === 'HUMAN_AGENT_REQUEST' ||
-      (analysis.intent === 'SUPPORT_REQUEST' && 
-       analysis.detected_entities?.urgency_level === 'high')
-    );
-  }
+  return "general";
 }
