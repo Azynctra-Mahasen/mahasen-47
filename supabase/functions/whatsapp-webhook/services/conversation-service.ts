@@ -1,67 +1,112 @@
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { Database } from "../../_shared/database.types.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-interface Message {
-  role: string;
-  content: string;
-}
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+);
 
-export async function getConversationContext(
-  supabase: SupabaseClient<Database>,
-  conversationId: string,
-  contextLength: number = 2,
-  userId: string // Added userId parameter
-): Promise<Message[]> {
-  try {
-    // First verify that this conversation belongs to the user
-    const { data: conversation, error: conversationError } = await supabase
+export class ConversationService {
+  static async getOrCreateConversation(userId: string, userName: string): Promise<string> {
+    const { data: conversation, error: convError } = await supabase
       .from("conversations")
       .select("id")
-      .eq("id", conversationId)
-      .eq("user_id", userId) // Check user_id
-      .maybeSingle();
+      .eq("contact_number", userId)
+      .single();
 
-    if (conversationError || !conversation) {
-      console.error("Error or unauthorized access to conversation:", conversationError);
-      return [];
+    if (convError && convError.code !== 'PGRST116') {
+      console.error('Error fetching conversation:', convError);
+      throw convError;
     }
 
-    // Get recent messages from this conversation
-    const { data: messages, error: messagesError } = await supabase
+    if (!conversation) {
+      const { data: newConv, error: createError } = await supabase
+        .from("conversations")
+        .insert({
+          contact_number: userId,
+          contact_name: userName,
+          platform: 'whatsapp'
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      return newConv.id;
+    }
+
+    return conversation.id;
+  }
+
+  static async storeMessage(
+    conversationId: string,
+    content: string,
+    senderName: string,
+    senderNumber: string,
+    whatsappMessageId: string
+  ): Promise<any> {
+    const { data: messageData, error: messageError } = await supabase
       .from("messages")
-      .select("*")
-      .eq("conversation_id", conversationId)
-      .eq("user_id", userId) // Filter by user_id
-      .order("created_at", { ascending: false })
-      .limit(contextLength * 2); // Get more messages than needed so we can have pairs
+      .insert({
+        conversation_id: conversationId,
+        content,
+        sender_name: senderName,
+        sender_number: senderNumber,
+        status: 'received',
+        whatsapp_message_id: whatsappMessageId
+      })
+      .select()
+      .single();
 
-    if (messagesError) {
-      console.error("Error fetching conversation messages:", messagesError);
-      return [];
+    if (messageError) {
+      console.error('Error creating message:', messageError);
+      throw messageError;
     }
 
-    // Format the messages in the context format needed by AI models
-    const context: Message[] = [];
-    if (messages) {
-      // Reverse to get chronological order
-      const sortedMessages = [...messages].sort((a, b) => 
-        new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-      );
+    return messageData;
+  }
 
-      for (const message of sortedMessages) {
-        // Determine if this is a user message or assistant message
-        const role = message.sender_number !== message.conversation_id ? "user" : "assistant";
-        context.push({
-          role,
-          content: message.content,
-        });
+  static async getRecentConversationHistory(userId: string, contextLength: number = 2): Promise<string> {
+    try {
+      console.log('Fetching conversation history for user:', userId);
+      
+      const { data: conversation } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("contact_number", userId)
+        .single();
+
+      if (!conversation) {
+        console.log('No existing conversation found for user');
+        return '';
       }
-    }
 
-    return context;
-  } catch (error) {
-    console.error("Error getting conversation context:", error);
-    return [];
+      const { data: messages, error } = await supabase
+        .from("messages")
+        .select("content, sender_name, created_at")
+        .eq("conversation_id", conversation.id)
+        .order("created_at", { ascending: false })
+        .limit(contextLength);
+
+      if (error) {
+        console.error('Error fetching conversation history:', error);
+        return '';
+      }
+
+      if (!messages || messages.length === 0) {
+        console.log('No message history found');
+        return '';
+      }
+
+      const formattedHistory = messages
+        .reverse()
+        .map(msg => `${msg.sender_name}: ${msg.content}`)
+        .join('\n');
+
+      console.log('Retrieved conversation history:', formattedHistory);
+      return formattedHistory;
+    } catch (error) {
+      console.error('Error in getRecentConversationHistory:', error);
+      return '';
+    }
   }
 }

@@ -42,21 +42,6 @@ export const useTicketUpdates = (ticket: Ticket | null, onClose: () => void) => 
 
       if (historyError) throw historyError;
       
-      // If this is an order ticket and it's marked as completed, 
-      // we could add custom logic here to update order_status
-      if (ticket.type === 'Order' && newStatus === 'Completed') {
-        const { error: orderUpdateError } = await supabase
-          .from("tickets")
-          .update({ 
-            order_status: 'completed'
-          })
-          .eq("id", ticket.id);
-          
-        if (orderUpdateError) {
-          console.error("Error updating order status:", orderUpdateError);
-        }
-      }
-      
       toast({
         title: "Status updated",
         description: `Ticket status changed to ${newStatus}`,
@@ -185,3 +170,4 @@ export const useTicketUpdates = (ticket: Ticket | null, onClose: () => void) => 
     handlePriorityChange
   };
 };
+

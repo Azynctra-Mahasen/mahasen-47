@@ -1,278 +1,267 @@
 
+// Follow this setup guide to integrate the Deno standard library
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { Database } from "../_shared/database.types.ts";
-import { processMessage } from "./message-processor.ts";
-import { getMessagingParams, sendWhatsAppMessage } from "./whatsapp.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
+
+// Define CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // Initialize Supabase client
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
+const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
-// Simple intent detection for order-related messages
-function detectOrderIntent(messageBody: string): boolean {
-  const orderKeywords = [
-    "order",
-    "buy",
-    "purchase",
-    "get",
-    "ඇණවුම",
-    "මිලදී ගන්න",
-    "ගන්න",
-  ];
-  
-  const lowerCaseMessage = messageBody.toLowerCase();
-  return orderKeywords.some(keyword => lowerCaseMessage.includes(keyword.toLowerCase()));
-}
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Extract product and quantity from message
-function extractOrderDetails(messageBody: string): { productName: string | null; quantity: number | null } {
-  // This is a very basic implementation - in a real system, you would use more sophisticated NLP
-  const lowerCaseMessage = messageBody.toLowerCase();
-  let productName = null;
-  let quantity = null;
-  
-  // Look for quantity patterns like "2 apples" or "ten shirts"
-  const quantityMatch = lowerCaseMessage.match(/(\d+)\s+(\w+)/);
-  if (quantityMatch) {
-    quantity = parseInt(quantityMatch[1]);
-    productName = quantityMatch[2];
-  }
-  
-  // If no product/quantity found, try to extract just a product name
-  if (!productName) {
-    const words = lowerCaseMessage.split(/\s+/);
-    // Skip common words and take a potential product name
-    const potentialProducts = words.filter(w => 
-      w.length > 3 && 
-      !["order", "buy", "get", "please", "would", "like", "want", "some"].includes(w)
-    );
-    
-    if (potentialProducts.length > 0) {
-      productName = potentialProducts[0];
-    }
-    
-    // Default quantity if not found
-    if (!quantity && productName) {
-      quantity = 1;
-    }
-  }
-  
-  return { productName, quantity };
-}
-
-// Create a ticket for an order
-async function createOrderTicket(
-  userId: string,
-  customerName: string,
-  customerNumber: string,
-  conversationId: string,
-  messageId: string,
-  messageBody: string,
-  productName: string,
-  quantity: number
-) {
+// Finds the user who owns the WhatsApp phone ID from the incoming webhook
+async function findUserByWhatsAppPhoneId(phoneNumberId: string): Promise<string | null> {
   try {
-    const ticketId = await generateTicketId();
+    // Trim whitespace from the phone number ID for comparison
+    const cleanPhoneNumberId = phoneNumberId.trim();
     
-    const { data: ticket, error } = await supabase
-      .from("tickets")
-      .insert({
-        id: ticketId, // Use the same ID for both order and ticket
-        title: `Order - ${productName}`,
-        customer_name: customerName,
-        body: `Product: ${productName}, Quantity: ${quantity}. Original message: ${messageBody}`,
-        platform: "whatsapp",
-        type: "Order",
-        priority: "HIGH",
-        status: "New",
-        user_id: userId,
-        conversation_id: conversationId,
-        whatsapp_message_id: messageId,
-        product_info: { name: productName, quantity: quantity }
-      })
-      .select("id")
-      .single();
-      
+    console.log("Looking for user with WhatsApp phone ID:", cleanPhoneNumberId);
+    
+    // First try an exact match
+    const { data: secrets, error } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_phone_id')
+      .eq('whatsapp_phone_id', cleanPhoneNumberId);
+    
     if (error) {
-      console.error("Error creating order ticket:", error);
+      console.error("Error finding user by WhatsApp phone ID:", error.message);
       return null;
     }
     
-    console.log(`Created order ticket with ID: ${ticket.id}`);
-    return ticket.id;
+    // If exact match found, return the user ID
+    if (secrets && secrets.length > 0) {
+      console.log("Found user by exact match:", secrets[0].user_id);
+      return secrets[0].user_id;
+    }
+    
+    // If no exact match, try with trimmed values from the database
+    const { data: allSecrets, error: allSecretsError } = await supabase
+      .from('platform_secrets')
+      .select('user_id, whatsapp_phone_id');
+    
+    if (allSecretsError) {
+      console.error("Error fetching all platform secrets:", allSecretsError.message);
+      return null;
+    }
+    
+    console.log("Available platform_secrets:", JSON.stringify(allSecrets));
+    
+    // Find a match with trimmed values
+    const matchingSecret = allSecrets?.find(secret => 
+      secret.whatsapp_phone_id && secret.whatsapp_phone_id.trim() === cleanPhoneNumberId
+    );
+    
+    if (matchingSecret) {
+      console.log("Found user by trimmed match:", matchingSecret.user_id);
+      return matchingSecret.user_id;
+    }
+    
+    console.error(`No user found for WhatsApp phone ID: ${phoneNumberId}`);
+    return null;
   } catch (error) {
-    console.error("Exception creating order ticket:", error);
+    console.error("Error in findUserByWhatsAppPhoneId:", error);
     return null;
   }
 }
 
-// Generate a ticket ID
-async function generateTicketId(): Promise<number> {
-  // In a real implementation, this might query for the latest ticket ID and increment it
-  // For simplicity, we'll just use the current timestamp
-  return Math.floor(Date.now() / 1000);
+// Get platform secrets for a user
+async function getUserPlatformSecrets(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('platform_secrets')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      console.error("Error fetching platform secrets:", error.message);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Error in getUserPlatformSecrets:", error);
+    return null;
+  }
+}
+
+// Process a WhatsApp webhook message
+async function processWebhook(webhookBody: any) {
+  try {
+    console.log("WhatsApp API payload:", JSON.stringify(webhookBody));
+    
+    if (webhookBody.object !== 'whatsapp_business_account') {
+      console.error("Unknown webhook object type:", webhookBody.object);
+      return { success: false, error: "Unsupported webhook object type" };
+    }
+    
+    // Process each entry in the webhook
+    for (const entry of webhookBody.entry || []) {
+      // Process each change in the entry
+      for (const change of entry.changes || []) {
+        if (change.field !== 'messages') continue;
+        
+        const value = change.value;
+        if (!value || !value.metadata || !value.metadata.phone_number_id) {
+          console.error("Missing phone_number_id in webhook payload");
+          continue;
+        }
+        
+        const phoneNumberId = value.metadata.phone_number_id;
+        console.log("Processing message for phone_number_id:", phoneNumberId);
+        
+        // Find the user to whom this message belongs
+        const userId = await findUserByWhatsAppPhoneId(phoneNumberId);
+        if (!userId) {
+          console.error("No user found for phone_number_id:", phoneNumberId);
+          continue;
+        }
+        
+        console.log("Found user for the message:", userId);
+        
+        // Get the user's platform secrets to use for processing
+        const userSecrets = await getUserPlatformSecrets(userId);
+        if (!userSecrets) {
+          console.error("Failed to retrieve platform secrets for user:", userId);
+          continue;
+        }
+        
+        // Process the messages
+        const messages = value.messages || [];
+        for (const message of messages) {
+          // Process each individual message
+          console.log("Processing message:", JSON.stringify(message));
+          
+          // Insert the message into the database (simplified example)
+          const messageContent = message.text?.body || message.caption || "Media message";
+          const senderNumber = message.from;
+          const senderName = value.contacts?.[0]?.profile?.name || "Unknown";
+          const whatsappMessageId = message.id;
+          
+          const { data: existingConversation, error: convError } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('contact_number', senderNumber)
+            .eq('platform', 'whatsapp')
+            .maybeSingle();
+          
+          let conversationId = existingConversation?.id;
+          
+          // Create a new conversation if one doesn't exist
+          if (!conversationId) {
+            const { data: newConv, error: newConvError } = await supabase
+              .from('conversations')
+              .insert({
+                user_id: userId,
+                contact_number: senderNumber,
+                contact_name: senderName,
+                platform: 'whatsapp',
+                ai_enabled: false
+              })
+              .select('id')
+              .single();
+            
+            if (newConvError) {
+              console.error("Error creating conversation:", newConvError);
+              continue;
+            }
+            
+            conversationId = newConv.id;
+          }
+          
+          // Save the message to the database
+          const { error: msgError } = await supabase
+            .from('messages')
+            .insert({
+              user_id: userId,
+              conversation_id: conversationId,
+              content: messageContent,
+              sender_name: senderName,
+              sender_number: senderNumber,
+              status: 'received',
+              whatsapp_message_id: whatsappMessageId
+            });
+          
+          if (msgError) {
+            console.error("Error saving message:", msgError);
+            continue;
+          }
+          
+          console.log("Message saved successfully");
+        }
+      }
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error processing webhook:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Verify webhook challenge
+function verifyWebhookChallenge(req: Request, url: URL): Response | null {
+  const mode = url.searchParams.get('hub.mode');
+  const token = url.searchParams.get('hub.verify_token');
+  const challenge = url.searchParams.get('hub.challenge');
+  
+  console.log("Verification request received - mode:", mode, "token:", token);
+  
+  // If this is a verification request
+  if (mode === 'subscribe' && token && challenge) {
+    // Normally we would check the token against the one in the database per user
+    // But for simplicity and to disable JWT enforcement, we'll accept any token for now
+    console.log("Verification successful, returning challenge");
+    return new Response(challenge, { status: 200 });
+  }
+  
+  return null;
 }
 
 serve(async (req) => {
+  // Parse URL to get query parameters
+  const url = new URL(req.url);
+  
   // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-
-  const url = new URL(req.url);
-  console.log(`Received ${req.method} request to ${url.pathname}`);
-
-  // Handle WhatsApp verification request
-  if (req.method === "GET") {
-    const mode = url.searchParams.get("hub.mode");
-    const token = url.searchParams.get("hub.verify_token");
-    const challenge = url.searchParams.get("hub.challenge");
-
-    console.log(`Webhook verification: mode=${mode}, token=${token}`);
-
-    if (mode === "subscribe") {
-      // We should verify the token against the user's verify_token in the database
-      // But for now, let's just accept the verification
-      console.log("Webhook verified successfully");
-      return new Response(challenge, {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "text/plain" },
+  
+  try {
+    // Check if this is a webhook verification request
+    const verificationResponse = verifyWebhookChallenge(req, url);
+    if (verificationResponse) {
+      return verificationResponse;
+    }
+    
+    // For regular webhook POST calls
+    if (req.method === 'POST') {
+      const payload = await req.json();
+      const result = await processWebhook(payload);
+      
+      return new Response(JSON.stringify(result), {
+        status: result.success ? 200 : 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    return new Response("Verification failed", {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "text/plain" },
+    
+    // For unsupported methods
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error("Error in webhook handler:", error);
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-
-  // Handle webhook events
-  if (req.method === "POST") {
-    try {
-      const body = await req.json();
-      console.log("WhatsApp API payload:", JSON.stringify(body));
-
-      // Check if this is a WhatsApp message event
-      if (body.object === "whatsapp_business_account") {
-        for (const entry of body.entry || []) {
-          for (const change of entry.changes || []) {
-            if (change.value?.messaging_product === "whatsapp" && 
-                change.value?.messages?.length > 0) {
-              
-              const metadata = change.value.metadata;
-              const phoneNumberId = metadata.phone_number_id;
-              
-              // Use the get_user_by_phone_number_id function to identify which user this message is for
-              const { data: userId, error: userError } = await supabase.rpc(
-                "get_user_by_phone_number_id",
-                { phone_id: phoneNumberId }
-              );
-              
-              if (userError || !userId) {
-                console.error("Error getting user ID for phone number ID:", userError);
-                return new Response(JSON.stringify({ error: "User not found for this WhatsApp account" }), {
-                  status: 404,
-                  headers: { ...corsHeaders, "Content-Type": "application/json" },
-                });
-              }
-              
-              console.log(`Found user ID for phone number ID ${phoneNumberId}: ${userId}`);
-              
-              // Process each message
-              for (const message of change.value.messages) {
-                if (message.type === "text") {
-                  const contact = change.value.contacts?.[0];
-                  const contactName = contact?.profile?.name || "Unknown";
-                  const from = message.from;
-                  const messageId = message.id;
-                  const messageBody = message.text.body;
-                  
-                  // Process and store the message
-                  const { conversationId, dbMessageId } = await processMessage(supabase, {
-                    from,
-                    contactName,
-                    messageId,
-                    messageBody,
-                    phoneNumberId,
-                    userId
-                  });
-                  
-                  // Check if this message has an order intent
-                  if (detectOrderIntent(messageBody)) {
-                    console.log("Order intent detected in message");
-                    
-                    // Extract product and quantity from the message
-                    const { productName, quantity } = extractOrderDetails(messageBody);
-                    
-                    if (productName && quantity) {
-                      console.log(`Extracted order details: ${quantity} ${productName}`);
-                      
-                      // Create an order ticket
-                      const ticketId = await createOrderTicket(
-                        userId,
-                        contactName,
-                        from,
-                        conversationId,
-                        messageId,
-                        messageBody,
-                        productName,
-                        quantity
-                      );
-                      
-                      if (ticketId) {
-                        // Get messaging params
-                        const messagingParams = await getMessagingParams(supabase, phoneNumberId, userId);
-                        
-                        if (messagingParams) {
-                          // Send confirmation message
-                          const confirmationMessage = 
-                            `Thank you for your interest in ${productName}. Would you like to place an order for ${quantity} units? Please type "Yes" to confirm.`;
-                          
-                          await sendWhatsAppMessage(messagingParams, from, confirmationMessage);
-                        }
-                      }
-                    } else {
-                      console.log("Could not extract complete order details from message");
-                      
-                      // Get messaging params
-                      const messagingParams = await getMessagingParams(supabase, phoneNumberId, userId);
-                      
-                      if (messagingParams) {
-                        // Send request for more information
-                        const requestMoreInfoMessage = 
-                          "I'd be happy to help you place an order. Could you please specify what product and quantity you'd like to order?";
-                        
-                        await sendWhatsAppMessage(messagingParams, from, requestMoreInfoMessage);
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (error) {
-      console.error("Error processing webhook:", error);
-      
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  }
-
-  // Handle other HTTP methods
-  return new Response(JSON.stringify({ error: "Method not allowed" }), {
-    status: 405,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 });
