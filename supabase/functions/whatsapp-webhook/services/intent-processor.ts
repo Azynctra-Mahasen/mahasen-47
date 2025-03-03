@@ -1,210 +1,146 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Database } from "../../_shared/database.types.ts";
+import { MessagingParams, sendWhatsAppMessage } from "../whatsapp.ts";
+import { createNewTicket } from "../automatedTicketService.ts";
+import { Intent } from "../types/intent.ts";
+import { getAISettings } from "../ai-settings.ts";
+import { generateAIResponse } from "../services/response-processor.ts";
+import { fetchKnowledgeBaseMatches } from "../services/knowledge-base.ts";
+import { processOrderIntent } from "../services/order-processor.ts";
 
-interface MessagingParams {
-  phoneId: string;
-  accessToken: string;
-}
-
+// Process the detected intent
 export async function handleIntent(
-  supabase: ReturnType<typeof createClient<Database>>,
+  supabase: SupabaseClient<Database>,
   conversationId: string,
   messageId: string,
   messageContent: string,
-  fromNumber: string,
-  contactName: string,
+  senderNumber: string,
+  senderName: string,
   messagingParams: MessagingParams,
-  userId: string
+  userId: string // Added userId parameter
 ) {
   try {
-    console.log(`Processing intent for message: ${messageContent}`);
+    // Get AI settings for this user
+    const aiSettings = await getAISettings(supabase, userId);
 
-    // Check for order intent
-    const orderIntent = detectOrderIntent(messageContent);
-    if (orderIntent) {
-      console.log("Order intent detected");
-      await handleOrderIntent(
-        supabase,
-        conversationId,
-        messageId,
-        fromNumber,
-        contactName,
-        messageContent,
-        messagingParams,
-        userId
-      );
-      return;
-    }
+    // Simple intent detection (can be replaced with more sophisticated logic)
+    const intent = detectIntent(messageContent);
+    console.log(`Detected intent: ${intent} for message: "${messageContent}"`);
 
-    // Default handling - for now, just log the message
-    console.log("No specific intent detected");
+    // Process based on intent
+    switch (intent) {
+      case "order":
+        await processOrderIntent(
+          supabase,
+          conversationId,
+          messageId,
+          messageContent,
+          senderNumber,
+          senderName,
+          messagingParams,
+          userId
+        );
+        break;
 
-  } catch (error) {
-    console.error("Error processing intent:", error);
-  }
-}
+      case "support":
+        // Create a support ticket
+        await createNewTicket(
+          supabase,
+          {
+            platform: "whatsapp",
+            type: "Support",
+            title: `Support request from ${senderName}`,
+            body: messageContent,
+            customer_name: senderName,
+            status: "New",
+            priority: "HIGH",
+            context: `Conversation ID: ${conversationId}`,
+            whatsapp_message_id: messageId,
+          },
+          userId // Pass userId to ensure the ticket is created for the correct user
+        );
 
-function detectOrderIntent(message: string): boolean {
-  const orderKeywords = [
-    "order",
-    "buy",
-    "purchase",
-    "get",
-    "ගන්න",
-    "ඔන්ඩර්",
-    "ඔර්ඩර්",
-    "මිලදී"
-  ];
-  
-  const lowerMessage = message.toLowerCase();
-  return orderKeywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
-}
+        // Send acknowledgment
+        await sendWhatsAppMessage(
+          messagingParams,
+          senderNumber,
+          "Thank you for your support request. Our team will get back to you shortly."
+        );
+        break;
 
-async function handleOrderIntent(
-  supabase: ReturnType<typeof createClient<Database>>,
-  conversationId: string,
-  messageId: string,
-  fromNumber: string,
-  contactName: string,
-  messageContent: string,
-  messagingParams: MessagingParams,
-  userId: string
-) {
-  try {
-    // Extract product and quantity information (simple implementation)
-    const { productName, quantity } = extractProductInfo(messageContent);
-    
-    // Create a ticket for the order
-    const { data: ticket, error: ticketError } = await supabase
-      .from("tickets")
-      .insert({
-        title: `Order: ${productName || "Unknown product"}`,
-        customer_name: contactName,
-        body: `Order from WhatsApp: ${messageContent}`,
-        platform: "whatsapp",
-        type: "Order",
-        status: "New",
-        priority: "HIGH",
-        conversation_id: conversationId,
-        intent_type: "order",
-        product_info: {
-          product: productName || "Unknown product",
-          quantity: quantity || "Not specified"
-        },
-        user_id: userId
-      })
-      .select("id")
-      .single();
+      default:
+        // For general inquiries, use AI to generate a response
+        const knowledgeMatches = await fetchKnowledgeBaseMatches(
+          supabase,
+          messageContent,
+          userId // Pass userId to filter knowledge base by user
+        );
 
-    if (ticketError) {
-      console.error("Error creating order ticket:", ticketError);
-      return;
-    }
+        const aiResponse = await generateAIResponse(
+          supabase,
+          conversationId,
+          messageContent,
+          knowledgeMatches,
+          aiSettings,
+          userId // Pass userId for context
+        );
 
-    console.log(`Created order ticket: ${ticket.id}`);
+        // Send the AI-generated response
+        await sendWhatsAppMessage(messagingParams, senderNumber, aiResponse);
 
-    // Link the message to the ticket
-    await supabase
-      .from("ticket_messages")
-      .insert({
-        ticket_id: ticket.id,
-        message_id: messageId
-      });
-
-    // If product or quantity is missing, ask for it
-    if (!productName || !quantity) {
-      const responseMessage = !productName
-        ? "What product would you like to order?"
-        : "How many units would you like to order?";
-      
-      // Send response via WhatsApp
-      await sendResponse(
-        messagingParams.phoneId,
-        messagingParams.accessToken,
-        fromNumber,
-        responseMessage
-      );
-    } else {
-      // Send order confirmation
-      const confirmationMessage = 
-        `Thank you for your order!\n\nProduct: ${productName}\nQuantity: ${quantity}\n\nPlease type "Yes" or "ඔව්" to confirm your order.`;
-      
-      await sendResponse(
-        messagingParams.phoneId,
-        messagingParams.accessToken,
-        fromNumber,
-        confirmationMessage
-      );
+        // Store the AI response in the database
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          content: aiResponse,
+          status: "sent",
+          sender_number: messagingParams.phoneNumberId,
+          sender_name: "AI Assistant",
+          user_id: userId, // Set the user_id for the AI response message
+        });
     }
   } catch (error) {
-    console.error("Error handling order intent:", error);
-  }
-}
-
-function extractProductInfo(message: string): { productName: string | null; quantity: string | null } {
-  // A very simple implementation - in real scenarios, you would use NLP or a more robust parser
-  
-  // Extract product name - look for common patterns
-  let productName: string | null = null;
-  const productMatches = message.match(/(?:order|buy|get|ගන්න|ඕන|ඔනි|need).*?(\w+(?:\s+\w+){0,3})/i);
-  if (productMatches && productMatches[1]) {
-    productName = productMatches[1].trim();
-  }
-  
-  // Extract quantity - look for numbers
-  let quantity: string | null = null;
-  const quantityMatches = message.match(/(\d+)\s*(?:units|pieces|items|pcs|ක්|ගානක්|ගාණක්)/i);
-  if (quantityMatches && quantityMatches[1]) {
-    quantity = quantityMatches[1];
-  }
-  
-  return { productName, quantity };
-}
-
-async function sendResponse(
-  phoneId: string,
-  accessToken: string,
-  to: string,
-  message: string
-) {
-  try {
-    const url = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
-    
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: {
-          preview_url: false,
-          body: message,
-        },
-      }),
+    console.error("Error handling intent:", error);
+    // Log the error to the database
+    await supabase.from("system_logs").insert({
+      component: "intent-processor",
+      log_level: "ERROR",
+      message: `Error handling intent: ${error.message}`,
+      metadata: { error: error.toString() },
     });
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error("WhatsApp API error:", data);
-      return { 
-        success: false, 
-        error: `WhatsApp API error: ${data.error?.message || JSON.stringify(data)}` 
-      };
+    // Try to send an error message to the user
+    try {
+      await sendWhatsAppMessage(
+        messagingParams,
+        senderNumber,
+        "I'm sorry, but I encountered an error processing your request. Please try again later."
+      );
+    } catch (sendError) {
+      console.error("Error sending error message:", sendError);
     }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Error sending WhatsApp message:", error);
-    return { 
-      success: false, 
-      error: `Error sending WhatsApp message: ${error instanceof Error ? error.message : String(error)}` 
-    };
   }
+}
+
+// Simple intent detection function (can be expanded)
+function detectIntent(message: string): Intent {
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    lowerMessage.includes("buy") ||
+    lowerMessage.includes("order") ||
+    lowerMessage.includes("purchase") ||
+    lowerMessage.includes("product")
+  ) {
+    return "order";
+  } else if (
+    lowerMessage.includes("help") ||
+    lowerMessage.includes("support") ||
+    lowerMessage.includes("issue") ||
+    lowerMessage.includes("problem")
+  ) {
+    return "support";
+  }
+
+  return "general";
 }

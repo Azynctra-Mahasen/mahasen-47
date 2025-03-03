@@ -1,34 +1,36 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Database } from "../_shared/database.types.ts";
 
-interface MessagingParams {
-  phoneId: string;
+export interface MessagingParams {
+  phoneNumberId: string;
   accessToken: string;
+  recipientNumber: string;
 }
 
 export async function getMessagingParams(
-  supabase: ReturnType<typeof createClient<Database>>,
+  supabase: SupabaseClient<Database>,
   phoneNumberId: string,
   userId: string
 ): Promise<MessagingParams | null> {
   try {
-    // Get credentials from the database
-    const { data: secretsData, error: secretsError } = await supabase
+    // Get the platform secrets for this user and phone ID
+    const { data: platformSecret, error } = await supabase
       .from("platform_secrets")
-      .select("whatsapp_phone_id, whatsapp_access_token")
-      .eq("user_id", userId)
+      .select("whatsapp_access_token")
       .eq("whatsapp_phone_id", phoneNumberId)
-      .single();
+      .eq("user_id", userId) // Filter by user_id to ensure proper access
+      .maybeSingle();
 
-    if (secretsError || !secretsData) {
-      console.error("Error getting WhatsApp secrets:", secretsError?.message || "No data found");
+    if (error || !platformSecret) {
+      console.error("Error getting platform secrets:", error);
       return null;
     }
 
     return {
-      phoneId: secretsData.whatsapp_phone_id || "",
-      accessToken: secretsData.whatsapp_access_token || "",
+      phoneNumberId,
+      accessToken: platformSecret.whatsapp_access_token || "",
+      recipientNumber: "", // This will be set later when sending a message
     };
   } catch (error) {
     console.error("Error in getMessagingParams:", error);
@@ -37,48 +39,40 @@ export async function getMessagingParams(
 }
 
 export async function sendWhatsAppMessage(
-  phoneId: string,
-  accessToken: string,
-  to: string,
-  message: string
-): Promise<{ success: boolean; error?: string }> {
+  params: MessagingParams,
+  recipientNumber: string,
+  messageContent: string
+): Promise<boolean> {
   try {
-    const url = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
-    
+    const url = `https://graph.facebook.com/v18.0/${params.phoneNumberId}/messages`;
     const response = await fetch(url, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${params.accessToken}`,
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to,
+        to: recipientNumber,
         type: "text",
         text: {
-          preview_url: false,
-          body: message,
+          preview_url: true,
+          body: messageContent,
         },
       }),
     });
 
-    const data = await response.json();
-    
+    const responseData = await response.json();
+
     if (!response.ok) {
-      console.error("WhatsApp API error:", data);
-      return { 
-        success: false, 
-        error: `WhatsApp API error: ${data.error?.message || JSON.stringify(data)}` 
-      };
+      console.error("Error sending WhatsApp message:", responseData);
+      return false;
     }
 
-    return { success: true };
+    return true;
   } catch (error) {
-    console.error("Error sending WhatsApp message:", error);
-    return { 
-      success: false, 
-      error: `Error sending WhatsApp message: ${error instanceof Error ? error.message : String(error)}` 
-    };
+    console.error("Exception sending WhatsApp message:", error);
+    return false;
   }
 }
