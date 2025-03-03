@@ -1,130 +1,194 @@
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 import { Database } from "../../_shared/database.types.ts";
-import { MessagingParams, sendWhatsAppMessage } from "../whatsapp.ts";
-import { createNewTicket } from "../automatedTicketService.ts";
+import { sendWhatsAppMessage } from "../whatsapp.ts";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 export async function processOrderIntent(
-  supabase: SupabaseClient<Database>,
-  conversationId: string,
-  messageId: string,
-  messageContent: string,
-  senderNumber: string,
-  senderName: string,
-  messagingParams: MessagingParams,
-  userId: string // Added userId parameter
+  messageText: string,
+  contactPhone: string,
+  contactName: string,
+  userId: string,
+  phoneNumberId: string
 ) {
   try {
-    // Parse the order details from the message
-    const { productName, quantity } = extractOrderDetails(messageContent);
-
+    console.log("Processing order intent");
+    
+    // Extract product name and quantity from the message
+    const { productName, quantity } = extractOrderDetails(messageText);
+    
     if (!productName || !quantity) {
-      // If we couldn't extract both product and quantity, ask for more information
-      await sendWhatsAppMessage(
-        messagingParams,
-        senderNumber,
-        "I'd like to help you place an order. Could you please specify the product name and quantity you want to order?"
-      );
+      // Ask for missing information
+      let response = "I'd like to help you place an order. ";
+      if (!productName) response += "Could you please specify which product you'd like to order? ";
+      if (!quantity) response += "How many units would you like to order? ";
       
-      // Store this response in the database
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        content: "I'd like to help you place an order. Could you please specify the product name and quantity you want to order?",
-        status: "sent",
-        sender_number: messagingParams.phoneNumberId,
-        sender_name: "AI Assistant",
-        user_id: userId, // Set the user_id for the response message
-      });
-      
+      await sendWhatsAppMessage(contactPhone, response, phoneNumberId);
       return;
     }
-
-    // Create an order confirmation message
-    const confirmationMessage = `Would you like to place an order for ${quantity} ${productName}? Please reply with "Yes", "Ow", or "ඔව්" to confirm your order.`;
     
-    // Send the confirmation message
-    await sendWhatsAppMessage(messagingParams, senderNumber, confirmationMessage);
-    
-    // Store the confirmation message and order details in the database
-    const { data: confirmationData, error: confirmationError } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversationId,
-        content: confirmationMessage,
-        status: "sent",
-        sender_number: messagingParams.phoneNumberId,
-        sender_name: "AI Assistant",
-        order_info: { productName, quantity, status: "awaiting_confirmation" },
-        user_id: userId, // Set the user_id
-      })
-      .select("id")
+    // Verify the product exists in the user's inventory
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, title, price")
+      .eq("user_id", userId)
+      .ilike("title", `%${productName}%`)
       .single();
-      
-    if (confirmationError) {
-      console.error("Error storing confirmation message:", confirmationError);
-      throw confirmationError;
+    
+    if (productError || !product) {
+      await sendWhatsAppMessage(
+        contactPhone, 
+        `I'm sorry, I couldn't find the product "${productName}" in our inventory. Could you please check the product name and try again?`,
+        phoneNumberId
+      );
+      return;
     }
     
-    // Create a pending order ticket
-    await createNewTicket(
-      supabase,
-      {
-        platform: "whatsapp",
-        type: "Order",
-        title: `Order for ${productName}`,
-        body: `Customer wants to order ${quantity} ${productName}.`,
-        customer_name: senderName,
-        status: "New",
-        priority: "HIGH",
-        product_info: { productName, quantity },
-        confirmation_message_id: confirmationData.id,
-        whatsapp_message_id: messageId,
-        conversation_id: conversationId,
-      },
-      userId // Pass userId to ensure the ticket is created for the correct user
-    );
+    // Ask for confirmation
+    const confirmationMessage = 
+      `Please confirm your order:\n` +
+      `Product: ${product.title}\n` +
+      `Quantity: ${quantity}\n` +
+      `Price: ${product.price * quantity}\n\n` +
+      `Type "Yes", "Ow", or "ඔව්" to confirm your order.`;
+    
+    await sendWhatsAppMessage(contactPhone, confirmationMessage, phoneNumberId);
+    
+    // Store the pending order in the database for confirmation
+    await supabase.from("pending_orders").insert({
+      user_id: userId,
+      contact_phone: contactPhone,
+      contact_name: contactName,
+      product_id: product.id,
+      product_name: product.title,
+      quantity: quantity,
+      status: "pending_confirmation",
+      platform: "whatsapp"
+    });
     
   } catch (error) {
     console.error("Error processing order intent:", error);
-    // Log the error
-    await supabase.from("system_logs").insert({
-      component: "order-processor",
-      log_level: "ERROR",
-      message: `Error processing order: ${error.message}`,
-      metadata: { error: error.toString() },
-    });
-    
-    // Send an error message
     await sendWhatsAppMessage(
-      messagingParams,
-      senderNumber,
-      "I'm sorry, but I encountered an error processing your order. Please try again later."
+      contactPhone,
+      "Order failed. Please retry with correct Product & Quantity in a bit.",
+      phoneNumberId
     );
   }
 }
 
-// Helper function to extract order details
-function extractOrderDetails(message: string) {
-  const lowerMessage = message.toLowerCase();
+export async function confirmOrder(
+  contactPhone: string,
+  userId: string,
+  phoneNumberId: string
+) {
+  try {
+    // Get the pending order
+    const { data: pendingOrder, error: orderError } = await supabase
+      .from("pending_orders")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("contact_phone", contactPhone)
+      .eq("status", "pending_confirmation")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (orderError || !pendingOrder) {
+      await sendWhatsAppMessage(
+        contactPhone,
+        "No pending order found. Please start a new order.",
+        phoneNumberId
+      );
+      return;
+    }
+    
+    // Create a ticket for the order
+    const { data: ticket, error: ticketError } = await supabase
+      .from("tickets")
+      .insert({
+        user_id: userId,
+        title: `Order for ${pendingOrder.product_name}`,
+        description: `Product: ${pendingOrder.product_name}\nQuantity: ${pendingOrder.quantity}`,
+        customer_name: pendingOrder.contact_name,
+        platform: "whatsapp",
+        type: "Order",
+        status: "New",
+        priority: "HIGH"
+      })
+      .select()
+      .single();
+    
+    if (ticketError || !ticket) {
+      console.error("Error creating ticket:", ticketError);
+      await sendWhatsAppMessage(
+        contactPhone,
+        "Order failed. Please retry with correct Product & Quantity in a bit.",
+        phoneNumberId
+      );
+      return;
+    }
+    
+    // Update the pending order status
+    await supabase
+      .from("pending_orders")
+      .update({ 
+        status: "confirmed",
+        ticket_id: ticket.id 
+      })
+      .eq("id", pendingOrder.id);
+    
+    // Send confirmation message
+    await sendWhatsAppMessage(
+      contactPhone,
+      `Your Order for ${pendingOrder.product_name} for ${pendingOrder.quantity} is placed successfully. Order Number is ${ticket.id}.`,
+      phoneNumberId
+    );
+    
+  } catch (error) {
+    console.error("Error confirming order:", error);
+    await sendWhatsAppMessage(
+      contactPhone,
+      "Order failed. Please retry with correct Product & Quantity in a bit.",
+      phoneNumberId
+    );
+  }
+}
+
+// Helper function to extract product name and quantity from the message
+function extractOrderDetails(messageText: string): { productName?: string; quantity?: number } {
+  const result: { productName?: string; quantity?: number } = {};
   
-  // Very basic extraction logic (this can be improved with NLP)
-  let productName = null;
-  let quantity = null;
+  // Simple extraction logic - can be improved with NLP
+  const words = messageText.split(/\s+/);
   
-  // Look for product names (this is a simplistic approach)
-  const productWords = ["t-shirt", "shirt", "hat", "cap", "book", "mug", "pen"];
-  for (const product of productWords) {
-    if (lowerMessage.includes(product)) {
-      productName = product;
-      break;
+  // Look for quantities (numbers)
+  for (let i = 0; i < words.length; i++) {
+    const num = parseInt(words[i]);
+    if (!isNaN(num)) {
+      result.quantity = num;
+      // Assume the product name might be before or after the quantity
+      if (i > 0 && !result.productName) {
+        result.productName = words[i-1];
+      } else if (i < words.length - 1 && !result.productName) {
+        result.productName = words[i+1];
+      }
     }
   }
   
-  // Look for quantity
-  const quantityMatch = lowerMessage.match(/(\d+)/);
-  if (quantityMatch) {
-    quantity = parseInt(quantityMatch[1]);
+  // If no product name was found with quantity, try to find product-like words
+  if (!result.productName) {
+    // Simple heuristic: words starting with capital letters might be product names
+    const capitalizedWords = words.filter(word => 
+      word.length > 3 && word[0] === word[0].toUpperCase()
+    );
+    
+    if (capitalizedWords.length > 0) {
+      result.productName = capitalizedWords[0];
+    }
   }
   
-  return { productName, quantity };
+  return result;
 }

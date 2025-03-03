@@ -1,76 +1,94 @@
 
-import { createTicket, linkMessageToTicket } from "../database.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import { Database } from "../../_shared/database.types.ts";
+import { IntentResult } from "../types/intent.ts";
 
-interface TicketContext {
-  messageId: string;
-  conversationId: string;
-  userName: string;
-  platform: string;
-  messageContent: string;
-  knowledgeBase?: string;
-  userId: string;
-}
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-interface AIResponse {
-  response: string;
-  intent?: string;
-  confidence?: number;
-  needs_human?: boolean;
-  escalation_reason?: string;
-  entities?: Record<string, any>;
-  sentiment?: string;
-  emotion?: string;
-  priority?: string;
-  product_info?: Record<string, any>;
-}
-
-export class TicketHandler {
-  static async handleTicketCreation(
-    aiResponse: AIResponse,
-    context: TicketContext
-  ): Promise<string | null> {
-    // If the AI doesn't indicate it needs human help, continue with automated response
-    if (!aiResponse.needs_human) {
+export async function createTicket(
+  messageText: string,
+  contactPhone: string,
+  contactName: string,
+  intentResult: IntentResult,
+  userId: string
+) {
+  try {
+    // Map intent to ticket type and priority
+    const ticketType = mapIntentToTicketType(intentResult.intent);
+    const priority = mapIntentToPriority(intentResult.intent);
+    
+    // Generate a title based on the message
+    const title = generateTicketTitle(messageText, intentResult.intent);
+    
+    // Create the ticket
+    const { data: ticket, error } = await supabase
+      .from("tickets")
+      .insert({
+        user_id: userId,
+        title: title,
+        description: messageText,
+        customer_name: contactName,
+        customer_contact: contactPhone,
+        platform: "whatsapp",
+        type: ticketType,
+        status: "New",
+        priority: priority
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error("Error creating ticket:", error);
       return null;
     }
-
-    try {
-      console.log("Creating ticket based on AI response:", JSON.stringify(aiResponse));
-
-      const ticketType = aiResponse.intent || "SUPPORT";
-      const priority = aiResponse.priority || "LOW";
-      const confidenceScore = aiResponse.confidence || 0.5;
-
-      // Create a ticket
-      const ticket = await createTicket(
-        {
-          title: `${ticketType} Request from ${context.userName}`,
-          body: context.messageContent,
-          customerName: context.userName,
-          platform: context.platform,
-          type: ticketType,
-          status: "New",
-          conversationId: context.conversationId,
-          intentType: ticketType,
-          escalationReason: aiResponse.escalation_reason || "AI requested human assistance",
-          priority: priority,
-          context: context.knowledgeBase || "",
-          confidenceScore: confidenceScore,
-          productInfo: aiResponse.product_info
-        },
-        context.userId // Pass user_id to ticket creation
-      );
-
-      // Link the message to the ticket
-      await linkMessageToTicket(ticket.id, context.messageId);
-
-      console.log(`Ticket created with ID: ${ticket.id}`);
-
-      // Return a response to send back to the user
-      return `I've created a support ticket (#${ticket.id}) for you. One of our human agents will get back to you as soon as possible.`;
-    } catch (error) {
-      console.error("Error handling ticket creation:", error);
-      return "I tried to create a ticket for you, but there was an error. Please try again later or contact our support team directly.";
-    }
+    
+    console.log(`Created ticket ${ticket.id} for ${contactName}`);
+    return ticket;
+  } catch (error) {
+    console.error("Error in createTicket:", error);
+    return null;
   }
+}
+
+// Map intent to ticket type
+function mapIntentToTicketType(intent: string): string {
+  switch (intent) {
+    case "COMPLAINT":
+      return "Complaint";
+    case "INQUIRY":
+    case "COMPLEX_INQUIRY":
+      return "Inquiry";
+    case "FEEDBACK":
+      return "Feedback";
+    case "SUPPORT":
+      return "Support";
+    default:
+      return "Other";
+  }
+}
+
+// Map intent to priority
+function mapIntentToPriority(intent: string): string {
+  switch (intent) {
+    case "COMPLAINT":
+      return "HIGH";
+    case "COMPLEX_INQUIRY":
+      return "MEDIUM";
+    case "SUPPORT":
+      return "MEDIUM";
+    default:
+      return "LOW";
+  }
+}
+
+// Generate a meaningful ticket title
+function generateTicketTitle(message: string, intent: string): string {
+  // Truncate message if too long
+  const truncatedMessage = message.length > 50 
+    ? message.substring(0, 47) + "..."
+    : message;
+  
+  return `${intent}: ${truncatedMessage}`;
 }

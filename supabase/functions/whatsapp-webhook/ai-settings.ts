@@ -1,43 +1,44 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import { Database } from "../_shared/database.types.ts";
+import { AISettingsType } from "./types/ai-settings.ts";
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-export interface AISettings {
-  tone: string;
-  behaviour: string | null;
-  model_name: 'llama-3.3-70b-versatile' | 'gemini-2.0-flash-exp';
-  context_memory_length: number;
-  conversation_timeout_hours: number;
-}
+// Default AI settings in case none are found
+const defaultAISettings: AISettingsType = {
+  model: "gemini-pro",
+  tone: "professional",
+  behavior: "You are a helpful AI assistant for a business. Answer questions accurately and professionally.",
+  context_memory: "recent",
+  conversation_timeout: 60,
+};
 
-export async function getAISettings(): Promise<AISettings> {
-  console.log('Fetching AI settings...');
-  
-  const { data, error } = await supabase
-    .from('ai_settings')
-    .select('*')
-    .eq('id', 1)
-    .maybeSingle();
+export async function getAISettings(userId: string): Promise<AISettingsType> {
+  try {
+    // Get AI settings for the specific user
+    const { data, error } = await supabase
+      .from("ai_settings")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
 
-  if (error) {
-    console.error('Error fetching AI settings:', error);
-    throw new Error('Failed to fetch AI settings');
-  }
+    if (error || !data) {
+      console.warn(`AI settings not found for user ${userId}, using defaults`);
+      return defaultAISettings;
+    }
 
-  if (!data) {
-    console.log('No AI settings found, using defaults');
     return {
-      tone: 'Professional',
-      behaviour: null,
-      model_name: 'llama-3.3-70b-versatile',
-      context_memory_length: 2,
-      conversation_timeout_hours: 1
+      model: data.model || defaultAISettings.model,
+      tone: data.tone || defaultAISettings.tone,
+      behavior: data.behavior || defaultAISettings.behavior,
+      context_memory: data.context_memory || defaultAISettings.context_memory,
+      conversation_timeout: data.conversation_timeout || defaultAISettings.conversation_timeout,
     };
+  } catch (error) {
+    console.error("Error retrieving AI settings:", error);
+    return defaultAISettings;
   }
-
-  console.log('AI settings retrieved:', data);
-  return data as AISettings;
 }
