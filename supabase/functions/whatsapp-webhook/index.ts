@@ -2,6 +2,8 @@
 // Follow this setup guide to integrate the Deno standard library
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
+import { authenticateWhatsAppUser } from "./auth-handler.ts";
+import { processMessage } from "./message-processor.ts";
 
 // Define CORS headers
 const corsHeaders = {
@@ -12,84 +14,7 @@ const corsHeaders = {
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// Finds the user who owns the WhatsApp phone ID from the incoming webhook
-async function findUserByWhatsAppPhoneId(phoneNumberId: string): Promise<string | null> {
-  try {
-    // Trim whitespace from the phone number ID for comparison
-    const cleanPhoneNumberId = phoneNumberId.trim();
-    
-    console.log("Looking for user with WhatsApp phone ID:", cleanPhoneNumberId);
-    
-    // First try an exact match
-    const { data: secrets, error } = await supabase
-      .from('platform_secrets')
-      .select('user_id, whatsapp_phone_id')
-      .eq('whatsapp_phone_id', cleanPhoneNumberId);
-    
-    if (error) {
-      console.error("Error finding user by WhatsApp phone ID:", error.message);
-      return null;
-    }
-    
-    // If exact match found, return the user ID
-    if (secrets && secrets.length > 0) {
-      console.log("Found user by exact match:", secrets[0].user_id);
-      return secrets[0].user_id;
-    }
-    
-    // If no exact match, try with trimmed values from the database
-    const { data: allSecrets, error: allSecretsError } = await supabase
-      .from('platform_secrets')
-      .select('user_id, whatsapp_phone_id');
-    
-    if (allSecretsError) {
-      console.error("Error fetching all platform secrets:", allSecretsError.message);
-      return null;
-    }
-    
-    console.log("Available platform_secrets:", JSON.stringify(allSecrets));
-    
-    // Find a match with trimmed values
-    const matchingSecret = allSecrets?.find(secret => 
-      secret.whatsapp_phone_id && secret.whatsapp_phone_id.trim() === cleanPhoneNumberId
-    );
-    
-    if (matchingSecret) {
-      console.log("Found user by trimmed match:", matchingSecret.user_id);
-      return matchingSecret.user_id;
-    }
-    
-    console.error(`No user found for WhatsApp phone ID: ${phoneNumberId}`);
-    return null;
-  } catch (error) {
-    console.error("Error in findUserByWhatsAppPhoneId:", error);
-    return null;
-  }
-}
-
-// Get platform secrets for a user
-async function getUserPlatformSecrets(userId: string) {
-  try {
-    const { data, error } = await supabase
-      .from('platform_secrets')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-    
-    if (error) {
-      console.error("Error fetching platform secrets:", error.message);
-      return null;
-    }
-    
-    return data;
-  } catch (error) {
-    console.error("Error in getUserPlatformSecrets:", error);
-    return null;
-  }
-}
 
 // Process a WhatsApp webhook message
 async function processWebhook(webhookBody: any) {
@@ -116,86 +41,17 @@ async function processWebhook(webhookBody: any) {
         const phoneNumberId = value.metadata.phone_number_id;
         console.log("Processing message for phone_number_id:", phoneNumberId);
         
-        // Find the user to whom this message belongs
-        const userId = await findUserByWhatsAppPhoneId(phoneNumberId);
-        if (!userId) {
-          console.error("No user found for phone_number_id:", phoneNumberId);
+        // Authenticate user and get context
+        const userContext = await authenticateWhatsAppUser(phoneNumberId);
+        if (!userContext) {
+          console.error("Failed to authenticate user for phone_number_id:", phoneNumberId);
           continue;
         }
         
-        console.log("Found user for the message:", userId);
+        console.log("Authenticated user context:", userContext);
         
-        // Get the user's platform secrets to use for processing
-        const userSecrets = await getUserPlatformSecrets(userId);
-        if (!userSecrets) {
-          console.error("Failed to retrieve platform secrets for user:", userId);
-          continue;
-        }
-        
-        // Process the messages
-        const messages = value.messages || [];
-        for (const message of messages) {
-          // Process each individual message
-          console.log("Processing message:", JSON.stringify(message));
-          
-          // Insert the message into the database (simplified example)
-          const messageContent = message.text?.body || message.caption || "Media message";
-          const senderNumber = message.from;
-          const senderName = value.contacts?.[0]?.profile?.name || "Unknown";
-          const whatsappMessageId = message.id;
-          
-          const { data: existingConversation, error: convError } = await supabase
-            .from('conversations')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('contact_number', senderNumber)
-            .eq('platform', 'whatsapp')
-            .maybeSingle();
-          
-          let conversationId = existingConversation?.id;
-          
-          // Create a new conversation if one doesn't exist
-          if (!conversationId) {
-            const { data: newConv, error: newConvError } = await supabase
-              .from('conversations')
-              .insert({
-                user_id: userId,
-                contact_number: senderNumber,
-                contact_name: senderName,
-                platform: 'whatsapp',
-                ai_enabled: false
-              })
-              .select('id')
-              .single();
-            
-            if (newConvError) {
-              console.error("Error creating conversation:", newConvError);
-              continue;
-            }
-            
-            conversationId = newConv.id;
-          }
-          
-          // Save the message to the database
-          const { error: msgError } = await supabase
-            .from('messages')
-            .insert({
-              user_id: userId,
-              conversation_id: conversationId,
-              content: messageContent,
-              sender_name: senderName,
-              sender_number: senderNumber,
-              status: 'received',
-              whatsapp_message_id: whatsappMessageId
-            });
-          
-          if (msgError) {
-            console.error("Error saving message:", msgError);
-            continue;
-          }
-          
-          console.log("Message saved successfully");
-        }
+        // Process the webhook payload with the user context
+        await processMessage(value, userContext);
       }
     }
     

@@ -16,15 +16,13 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
  */
 export async function processMessage(payload: any, userContext: UserContext) {
   try {
-    // Extract the message from the payload
-    const value = payload?.entry?.[0]?.changes?.[0]?.value;
-    
-    if (!value || value.messaging_product !== 'whatsapp') {
+    // Validate payload
+    if (!payload || payload.messaging_product !== 'whatsapp') {
       console.log('Not a WhatsApp message or invalid payload');
       return;
     }
     
-    const messages = value.messages || [];
+    const messages = payload.messages || [];
     
     if (messages.length === 0) {
       console.log('No messages in the payload');
@@ -33,7 +31,7 @@ export async function processMessage(payload: any, userContext: UserContext) {
     
     // Process each message in the payload
     for (const message of messages) {
-      await handleMessage(message, value, userContext);
+      await handleMessage(message, payload, userContext);
     }
   } catch (error) {
     console.error('Error processing webhook message:', error);
