@@ -1,113 +1,170 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
-import { Database } from "../../_shared/database.types.ts";
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export interface SearchResult {
+  id: string;
+  content: string;
+  similarity: number;
+  source: 'knowledge_base' | 'product';
+  metadata: {
+    price?: number;
+    discounts?: number;
+    title?: string;
+    product_id?: string;
+  };
+}
 
-export async function getKnowledgeBaseContext(query: string, userId: string) {
+export async function searchKnowledgeBase(
+  query_embedding: string, 
+  threshold = 0.5, 
+  count = 5
+): Promise<SearchResult[]> {
   try {
-    // Generate an embedding for the query
-    const embeddingResponse = await fetch(`${supabaseUrl}/functions/v1/generate-embedding`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseAnonKey}`,
-      },
-      body: JSON.stringify({ text: query }),
-    });
+    console.log('Searching knowledge base and products with embedding...');
+    
+    const { data: matches, error } = await supabase.rpc(
+      'match_knowledge_base_and_products',
+      {
+        query_text: '',
+        query_embedding,
+        match_count: count,
+        full_text_weight: 0.1,
+        semantic_weight: 0.9,
+        match_threshold: threshold,
+        rrf_k: 60
+      }
+    );
 
-    if (!embeddingResponse.ok) {
-      console.error("Failed to generate embedding:", await embeddingResponse.text());
+    if (error) {
+      console.error('Error searching knowledge base and products:', error);
       return [];
     }
 
-    const { embedding } = await embeddingResponse.json();
-
-    // Query knowledge base files for the specific user
-    const { data: knowledgeBaseFiles, error: kbError } = await supabase
-      .from("knowledge_base_files")
-      .select("id, content, embedding")
-      .eq("user_id", userId)
-      .limit(5);
-
-    if (kbError) {
-      console.error("Error querying knowledge base:", kbError);
+    if (!matches || matches.length === 0) {
+      console.log('No relevant matches found in knowledge base or products');
       return [];
     }
 
-    // Calculate similarity scores
-    const knowledgeBaseResults = knowledgeBaseFiles
-      ? knowledgeBaseFiles.map((file) => ({
-          id: file.id,
-          content: file.content,
-          similarity: cosineSimilarity(embedding, file.embedding),
-          source: "knowledge_base",
-          metadata: {},
-        }))
-      : [];
-
-    // Query products for the specific user
-    const { data: products, error: productsError } = await supabase
-      .from("products")
-      .select("id, title, description, price, discounts, embedding")
-      .eq("user_id", userId)
-      .eq("embedding_status", "completed")
-      .limit(5);
-
-    if (productsError) {
-      console.error("Error querying products:", productsError);
-      return knowledgeBaseResults;
-    }
-
-    // Calculate similarity scores for products
-    const productResults = products
-      ? products.map((product) => ({
-          id: product.id,
-          content: `${product.title}\n${product.description}`,
-          similarity: cosineSimilarity(embedding, product.embedding),
-          source: "product",
-          metadata: {
-            price: product.price,
-            discounts: product.discounts,
-            title: product.title,
-          },
-        }))
-      : [];
-
-    // Combine and sort results by similarity
-    const combinedResults = [...knowledgeBaseResults, ...productResults]
-      .filter((item) => item.similarity > 0.7) // Threshold for relevance
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 5); // Get top 5 results
-
-    return combinedResults;
+    console.log('Found relevant matches:', matches);
+    return matches;
   } catch (error) {
-    console.error("Error getting knowledge base context:", error);
+    console.error('Error in knowledge base search:', error);
     return [];
   }
 }
 
-// Helper function to calculate cosine similarity
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  if (!vecA || !vecB || vecA.length !== vecB.length) {
-    return 0;
+export async function getExactProduct(productName: string): Promise<SearchResult | null> {
+  try {
+    console.log('Searching for exact product match:', productName);
+    
+    const { data: product, error } = await supabase
+      .from('products')
+      .select('id, title, description, price, discounts')
+      .eq('title', productName)
+      .single();
+
+    if (error) {
+      console.error('Error finding exact product:', error);
+      return null;
+    }
+
+    if (!product) {
+      console.log('No exact product match found');
+      return null;
+    }
+
+    return {
+      id: product.id,
+      content: product.description,
+      similarity: 1,
+      source: 'product',
+      metadata: {
+        price: product.price,
+        discounts: product.discounts,
+        title: product.title,
+        product_id: product.id
+      }
+    };
+  } catch (error) {
+    console.error('Error in exact product search:', error);
+    return null;
+  }
+}
+
+export function formatSearchResults(results: SearchResult[]): string {
+  const productResults = results.filter(r => r.source === 'product');
+  const knowledgeResults = results.filter(r => r.source === 'knowledge_base');
+  
+  let formattedContent = '';
+
+  // Format product information first
+  if (productResults.length > 0) {
+    formattedContent += '--- Available Products ---\n';
+    productResults.forEach(product => {
+      const price = product.metadata?.price || 0;
+      const discount = product.metadata?.discounts || 0;
+      const finalPrice = price - (price * (discount / 100));
+      
+      formattedContent += `${product.metadata?.title}\n`;
+      formattedContent += `Price: $${finalPrice.toFixed(2)}`;
+      if (discount > 0) {
+        formattedContent += ` (${discount}% off from $${price})\n`;
+      } else {
+        formattedContent += '\n';
+      }
+      formattedContent += `${product.content}\n\n`;
+    });
   }
 
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
+  // Add knowledge base content
+  if (knowledgeResults.length > 0) {
+    if (productResults.length > 0) {
+      formattedContent += '--- Additional Information ---\n';
+    }
+    formattedContent += knowledgeResults
+      .map(result => result.content)
+      .join('\n\n');
   }
 
-  if (normA === 0 || normB === 0) {
-    return 0;
+  return formattedContent.trim();
+}
+
+export function formatKnowledgeBaseContext(searchResults: SearchResult[]): string {
+  const productResults = searchResults.filter(r => r.source === 'product');
+  const knowledgeResults = searchResults.filter(r => r.source === 'knowledge_base');
+  
+  let context = '';
+
+  // Format product information first
+  if (productResults.length > 0) {
+    context += '=== Available Products ===\n';
+    productResults.forEach(product => {
+      const price = product.metadata?.price || 0;
+      const discount = product.metadata?.discounts || 0;
+      const finalPrice = price - (price * (discount / 100));
+      
+      context += `Product: ${product.metadata?.title}\n`;
+      context += `Regular Price: $${price.toFixed(2)}\n`;
+      if (discount > 0) {
+        context += `Discount: ${discount}%\n`;
+        context += `Final Price: $${finalPrice.toFixed(2)}\n`;
+      }
+      context += `Description: ${product.content}\n\n`;
+    });
   }
 
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  // Add knowledge base content
+  if (knowledgeResults.length > 0) {
+    if (productResults.length > 0) {
+      context += '=== General Information ===\n';
+    }
+    context += knowledgeResults
+      .map(result => result.content)
+      .join('\n\n');
+  }
+
+  return context.trim();
 }
