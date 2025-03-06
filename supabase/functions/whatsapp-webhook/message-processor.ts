@@ -98,7 +98,7 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
       return;
     }
     
-    console.log(`Saved incoming message: ${savedMessage.id}`);
+    console.log(`Saved incoming message: ${savedMessage.id} for user: ${userContext.userId}`);
     
     // Get AI settings for the user
     const { data: aiSettings } = await supabase
@@ -121,12 +121,14 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
         const messageHistory = await getConversationHistory(conversationId);
         
         const context = {
-          userId: userContext.userId,
+          userId: userContext.userId, // Include user ID in context
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,
           messageHistory: messageHistory
         };
+        
+        console.log(`Generating AI response with context for user: ${userContext.userId}`);
         
         // Generate AI response
         const aiResponse = await generateAIResponse(

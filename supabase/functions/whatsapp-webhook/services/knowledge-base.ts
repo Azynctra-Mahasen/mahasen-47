@@ -20,17 +20,19 @@ export interface SearchResult {
 
 export async function searchKnowledgeBase(
   query_embedding: string, 
+  userId: string,
   threshold = 0.5, 
   count = 5
 ): Promise<SearchResult[]> {
   try {
-    console.log('Searching knowledge base and products with embedding...');
+    console.log(`Searching knowledge base and products with embedding for user: ${userId}`);
     
     const { data: matches, error } = await supabase.rpc(
       'match_knowledge_base_and_products',
       {
         query_text: '',
         query_embedding,
+        user_id: userId,
         match_count: count,
         full_text_weight: 0.1,
         semantic_weight: 0.9,
@@ -49,7 +51,7 @@ export async function searchKnowledgeBase(
       return [];
     }
 
-    console.log('Found relevant matches:', matches);
+    console.log(`Found ${matches.length} relevant matches for user ${userId}:`, matches);
     return matches;
   } catch (error) {
     console.error('Error in knowledge base search:', error);
@@ -57,14 +59,15 @@ export async function searchKnowledgeBase(
   }
 }
 
-export async function getExactProduct(productName: string): Promise<SearchResult | null> {
+export async function getExactProduct(productName: string, userId: string): Promise<SearchResult | null> {
   try {
-    console.log('Searching for exact product match:', productName);
+    console.log(`Searching for exact product match: "${productName}" for user: ${userId}`);
     
     const { data: product, error } = await supabase
       .from('products')
       .select('id, title, description, price, discounts')
       .eq('title', productName)
+      .eq('user_id', userId)
       .single();
 
     if (error) {
