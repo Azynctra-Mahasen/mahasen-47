@@ -16,11 +16,13 @@ export async function generateAIResponse(message: string, context: any, aiSettin
       normalize: true,
     });
 
-    // Ensure we have a valid user ID to filter results properly
+    // Validate user ID for proper isolation
     if (!context.userId) {
-      console.error('No userId provided in context for knowledge base search');
-      return "Sorry, I'm having trouble retrieving information right now. Please try again later.";
+      console.error('No userId provided in context for knowledge base search - this is a critical error');
+      return "Sorry, I'm having trouble accessing your information right now. Please try again later.";
     }
+
+    console.log(`Processing request for user ID: ${context.userId}`);
 
     // Search knowledge base with the embedding and user ID
     const searchResults = await searchKnowledgeBase(embedding, context.userId);

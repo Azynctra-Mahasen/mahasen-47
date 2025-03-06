@@ -77,6 +77,8 @@ export async function findUserByWhatsAppPhoneId(phoneNumberId: string): Promise<
  */
 export async function getUserPlatformSecrets(userId: string) {
   try {
+    console.log(`Getting platform secrets for user: ${userId}`);
+    
     const { data, error } = await supabase
       .from('platform_secrets')
       .select('*')
@@ -122,6 +124,8 @@ export async function authenticateWhatsAppUser(phoneNumberId: string): Promise<U
       whatsappPhoneId: secrets.whatsapp_phone_id || '',
       whatsappAccessToken: secrets.whatsapp_access_token || ''
     };
+    
+    console.log(`Successfully authenticated user ${userId} for WhatsApp phone ID ${phoneNumberId}`);
     
     return userContext;
   } catch (error) {

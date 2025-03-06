@@ -25,6 +25,11 @@ export async function searchKnowledgeBase(
   count = 5
 ): Promise<SearchResult[]> {
   try {
+    if (!userId) {
+      console.error('No userId provided for knowledge base search, cannot proceed');
+      return [];
+    }
+    
     console.log(`Searching knowledge base and products with embedding for user: ${userId}`);
     
     const { data: matches, error } = await supabase.rpc(
@@ -61,6 +66,11 @@ export async function searchKnowledgeBase(
 
 export async function getExactProduct(productName: string, userId: string): Promise<SearchResult | null> {
   try {
+    if (!userId) {
+      console.error('No userId provided for exact product search, cannot proceed');
+      return null;
+    }
+    
     console.log(`Searching for exact product match: "${productName}" for user: ${userId}`);
     
     const { data: product, error } = await supabase
@@ -76,10 +86,12 @@ export async function getExactProduct(productName: string, userId: string): Prom
     }
 
     if (!product) {
-      console.log('No exact product match found');
+      console.log(`No exact product match found for title "${productName}" and user_id "${userId}"`);
       return null;
     }
 
+    console.log(`Found exact product match for user ${userId}:`, product);
+    
     return {
       id: product.id,
       content: product.description,

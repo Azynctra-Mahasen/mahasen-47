@@ -1,4 +1,3 @@
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 import { UserContext } from './auth-handler.ts';
 import { generateAIResponse } from './ollama.ts';
@@ -28,6 +27,14 @@ export async function processMessage(payload: any, userContext: UserContext) {
       console.log('No messages in the payload');
       return;
     }
+    
+    // Ensure we have a valid user ID from context
+    if (!userContext.userId) {
+      console.error('No userId provided in userContext, cannot process message');
+      return;
+    }
+
+    console.log(`Processing messages for user ${userContext.userId}`);
     
     // Process each message in the payload
     for (const message of messages) {
@@ -198,6 +205,8 @@ async function getOrCreateConversation(
   contactNumber: string
 ): Promise<string> {
   try {
+    console.log(`Getting or creating conversation for user ${userId} and contact ${contactNumber}`);
+    
     // Check if conversation exists
     const { data: existingConversation } = await supabase
       .from('conversations')
@@ -207,6 +216,7 @@ async function getOrCreateConversation(
       .single();
     
     if (existingConversation) {
+      console.log(`Found existing conversation: ${existingConversation.id}`);
       return existingConversation.id;
     }
     
@@ -228,6 +238,7 @@ async function getOrCreateConversation(
       throw error;
     }
     
+    console.log(`Created new conversation: ${newConversation.id}`);
     return newConversation.id;
   } catch (error) {
     console.error('Error in getOrCreateConversation:', error);
