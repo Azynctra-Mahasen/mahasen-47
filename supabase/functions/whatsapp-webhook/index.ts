@@ -10,6 +10,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Default verification token
+const DEFAULT_VERIFY_TOKEN = 'fdgtryt5yt5y5y5@34';
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -25,7 +28,8 @@ serve(async (req) => {
 
     console.log("Webhook verification request received:", { mode, token, challenge });
 
-    const verifyToken = Deno.env.get('VERIFY_TOKEN') || '';
+    // Get the verify token from env or use default
+    const verifyToken = Deno.env.get('VERIFY_TOKEN') || DEFAULT_VERIFY_TOKEN;
 
     if (mode === 'subscribe' && token === verifyToken) {
       console.log("Webhook verified");
