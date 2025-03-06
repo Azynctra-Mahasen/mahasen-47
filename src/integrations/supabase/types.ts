@@ -961,24 +961,44 @@ export type Database = {
           similarity: number
         }[]
       }
-      match_knowledge_base_and_products: {
-        Args: {
-          query_text: string
-          query_embedding: string
-          match_count?: number
-          full_text_weight?: number
-          semantic_weight?: number
-          match_threshold?: number
-          rrf_k?: number
-        }
-        Returns: {
-          id: string
-          content: string
-          similarity: number
-          source: string
-          metadata: Json
-        }[]
-      }
+      match_knowledge_base_and_products:
+        | {
+            Args: {
+              query_text: string
+              query_embedding: string
+              match_count?: number
+              full_text_weight?: number
+              semantic_weight?: number
+              match_threshold?: number
+              rrf_k?: number
+            }
+            Returns: {
+              id: string
+              content: string
+              similarity: number
+              source: string
+              metadata: Json
+            }[]
+          }
+        | {
+            Args: {
+              query_text: string
+              query_embedding: string
+              user_id: string
+              match_count?: number
+              full_text_weight?: number
+              semantic_weight?: number
+              match_threshold?: number
+              rrf_k?: number
+            }
+            Returns: {
+              id: string
+              content: string
+              similarity: number
+              source: string
+              metadata: Json
+            }[]
+          }
       store_user_secret: {
         Args: {
           p_user_id: string

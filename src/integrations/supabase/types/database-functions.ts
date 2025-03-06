@@ -1,3 +1,4 @@
+
 export type DatabaseFunctions = {
   binary_quantize:
     | {
@@ -139,6 +140,25 @@ export type DatabaseFunctions = {
               similarity: number
             }[]
           }
+      match_knowledge_base_and_products: {
+        Args: {
+          query_text: string
+          query_embedding: string
+          user_id: string
+          match_count?: number
+          full_text_weight?: number
+          semantic_weight?: number
+          match_threshold?: number
+          rrf_k?: number
+        }
+        Returns: {
+          id: string
+          content: string
+          similarity: number
+          source: string
+          metadata: unknown
+        }[]
+      }
       sparsevec_out: {
         Args: {
           "": unknown
