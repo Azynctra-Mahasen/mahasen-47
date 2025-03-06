@@ -1,8 +1,2 @@
 
 project_id = "rorweifvcparnpgztvsq"
-name = "whatsapp-webhook"
-no_verify_jwt = true
-
-[functions.api.vector]
-name = "supabase-ai"
-value = "gte-small"

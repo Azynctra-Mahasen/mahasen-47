@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 import { UserContext } from './auth-handler.ts';
 import { generateAIResponse } from './ollama.ts';

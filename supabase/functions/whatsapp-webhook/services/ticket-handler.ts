@@ -1,128 +1,151 @@
 
-import { AutomatedTicketService } from '../automatedTicketService.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { getExactProduct } from "./knowledge-base.ts";
 
-interface TicketContext {
-  messageId: string;
-  conversationId: string;
-  userName: string;
-  platform: 'whatsapp' | 'facebook' | 'instagram';
-  messageContent: string;
-  knowledgeBaseContext?: string;
-}
-
-interface IntentAnalysis {
-  intent: string;
-  confidence: number;
-  requires_escalation?: boolean;
-  requires_to_escalation?: boolean;
-  escalation_reason: string | null;
-  detected_entities: {
-    product_mentions: string[];
-    issue_type: string | null;
-    urgency_level: 'low' | 'medium' | 'high';
-    order_info?: {
-      product: string;
-      quantity: number;
-      state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING' | 'COMPLETED';
-      confirmed: boolean;
-    };
-  };
-  response?: string;
-}
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export class TicketHandler {
-  static async handleTicketCreation(
-    analysis: IntentAnalysis,
-    context: TicketContext
-  ): Promise<string | null> {
-    console.log('Handling ticket creation with analysis:', analysis);
+  static async handleTicketCreation(parsedResponse: any, context: any): Promise<string | null> {
+    try {
+      if (!parsedResponse || !parsedResponse.intent) return null;
 
-    // Normalize the escalation property
-    const requiresEscalation = analysis.requires_escalation ?? analysis.requires_to_escalation ?? false;
+      // Validate user ID
+      if (!context.userId) {
+        console.error("No userId provided in context for ticket creation");
+        return "I'm having trouble processing your request. Please try again later.";
+      }
 
-    // Handle order tickets
-    if (analysis.intent === 'ORDER_PLACEMENT') {
-      const orderInfo = analysis.detected_entities?.order_info;
-      
-      // Only process if we have order info
-      if (orderInfo) {
-        // If in COLLECTING_INFO or CONFIRMING state, just return the response for confirmation
-        if (orderInfo.state === 'COLLECTING_INFO' || orderInfo.state === 'CONFIRMING') {
-          return analysis.response || 'Please confirm your order.';
+      // Check if this is an order intent
+      if (parsedResponse.intent === 'ORDER_PLACEMENT') {
+        return await this.handleOrderIntent(parsedResponse, context);
+      }
+
+      // Check if this needs escalation
+      if (parsedResponse.requires_escalation) {
+        return await this.createEscalationTicket(parsedResponse, context);
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error handling ticket creation:", error);
+      return null;
+    }
+  }
+
+  private static async handleOrderIntent(parsedResponse: any, context: any): Promise<string | null> {
+    try {
+      const orderInfo = parsedResponse.detected_entities?.order_info;
+      if (!orderInfo) return null;
+
+      // Check the order state
+      if (orderInfo.state === 'COLLECTING_INFO') {
+        // Missing product name, quantity or awaiting confirmation
+        if (!orderInfo.product_name) {
+          return "What product would you like to order?";
         }
         
-        // Only create ticket if order is confirmed and in PROCESSING state
-        if (orderInfo.state === 'PROCESSING' && orderInfo.confirmed) {
-          try {
-            const ticket = await this.createOrderTicket(analysis, context);
-            if (ticket) {
-              return `Your Order for ${orderInfo.product} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticket.id}.`;
-            }
-          } catch (error) {
-            console.error('Error creating order ticket:', error);
-            return "Order failed. Please retry with correct Product & Quantity in a bit.";
-          }
+        if (!orderInfo.quantity) {
+          return `How many of the ${orderInfo.product_name} would you like to order?`;
         }
+
+        // Verify product exists
+        const product = await getExactProduct(orderInfo.product_name, context.userId);
+        if (!product) {
+          return `I'm sorry, I couldn't find the product "${orderInfo.product_name}" in our catalog. Please check the product name and try again.`;
+        }
+        
+        // Ask for confirmation
+        return `You're about to order ${orderInfo.quantity} of ${orderInfo.product_name}. Please type "Yes", "Ow" or "ඔව්" to confirm your order.`;
+      } 
+      
+      if (orderInfo.state === 'CONFIRMED') {
+        // Get the exact product information
+        const product = await getExactProduct(orderInfo.product_name, context.userId);
+        if (!product) {
+          return `I'm sorry, I couldn't find the product "${orderInfo.product_name}" in our catalog. Please check the product name and try again.`;
+        }
+
+        // Create ticket
+        const ticketData = {
+          user_id: context.userId, // Make sure to use the user ID
+          title: `Order for ${orderInfo.product_name}`,
+          customer_name: context.userName,
+          platform: context.platform,
+          type: 'Order',
+          status: 'New',
+          priority: 'HIGH',
+          body: `Product Name: ${orderInfo.product_name}\nQuantity: ${orderInfo.quantity}`,
+          conversation_id: context.conversationId,
+          whatsapp_message_id: context.messageId,
+          product_info: {
+            product_id: product.metadata.product_id,
+            product_name: orderInfo.product_name,
+            quantity: orderInfo.quantity
+          }
+        };
+
+        const { data: ticket, error } = await supabase
+          .from('tickets')
+          .insert(ticketData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Error creating order ticket:", error);
+          return "Order failed. Please retry with correct Product & Quantity in a bit.";
+        }
+
+        return `Your Order for ${orderInfo.product_name} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticket.id}.`;
       }
-    }
 
-    // Handle support tickets
-    if (requiresEscalation || this.shouldEscalate(analysis)) {
-      try {
-        await this.createSupportTicket(analysis, context);
-      } catch (error) {
-        console.error('Error creating support ticket:', error);
+      return null;
+    } catch (error) {
+      console.error("Error handling order intent:", error);
+      return "Order failed. Please retry with correct Product & Quantity in a bit.";
+    }
+  }
+
+  private static async createEscalationTicket(parsedResponse: any, context: any): Promise<string | null> {
+    try {
+      const ticketData = {
+        user_id: context.userId, // Make sure to use the user ID
+        title: `Support Request: ${context.messageContent.substring(0, 50)}...`,
+        customer_name: context.userName,
+        platform: context.platform,
+        type: 'Support',
+        status: 'New',
+        priority: this.getPriorityFromResponse(parsedResponse),
+        body: context.messageContent,
+        conversation_id: context.conversationId,
+        whatsapp_message_id: context.messageId,
+        escalation_reason: parsedResponse.escalation_reason || 'Requires human assistance',
+        intent_type: parsedResponse.intent
+      };
+
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .insert(ticketData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating escalation ticket:", error);
+        return null;
       }
-    }
 
-    return null;
-  }
-
-  private static shouldEscalate(analysis: IntentAnalysis): boolean {
-    return analysis.intent === 'SUPPORT_REQUEST' && 
-           analysis.detected_entities.urgency_level === 'high';
-  }
-
-  private static async createOrderTicket(analysis: IntentAnalysis, context: TicketContext) {
-    const orderInfo = analysis.detected_entities.order_info;
-    if (!orderInfo) return null;
-
-    console.log('Creating order ticket with info:', orderInfo);
-    
-    try {
-      const ticket = await AutomatedTicketService.generateTicket({
-        messageId: context.messageId,
-        conversationId: context.conversationId,
-        analysis: analysis,
-        customerName: context.userName,
-        platform: context.platform,
-        messageContent: `Order: ${orderInfo.product} x ${orderInfo.quantity}`,
-        context: `Product: ${orderInfo.product}\nQuantity: ${orderInfo.quantity}`,
-        whatsappMessageId: context.messageId // Using messageId as whatsappMessageId for WhatsApp platform
-      });
-
-      return ticket;
+      return `I've created a support ticket for you. A customer service representative will get back to you soon. Your ticket number is ${ticket.id}.`;
     } catch (error) {
-      console.error('Error in createOrderTicket:', error);
-      throw error;
+      console.error("Error creating escalation ticket:", error);
+      return null;
     }
   }
 
-  private static async createSupportTicket(analysis: IntentAnalysis, context: TicketContext) {
-    try {
-      return await AutomatedTicketService.generateTicket({
-        messageId: context.messageId,
-        conversationId: context.conversationId,
-        analysis: analysis,
-        customerName: context.userName,
-        platform: context.platform,
-        messageContent: context.messageContent,
-        context: context.knowledgeBaseContext || '',
-        whatsappMessageId: context.messageId // Using messageId as whatsappMessageId for WhatsApp platform
-      });
-    } catch (error) {
-      console.error('Error in createSupportTicket:', error);
-      throw error;
-    }
+  private static getPriorityFromResponse(parsedResponse: any): string {
+    const urgency = parsedResponse.detected_entities?.urgency_level?.toUpperCase();
+    if (urgency === 'HIGH' || urgency === 'URGENT') return 'HIGH';
+    if (urgency === 'MEDIUM') return 'MEDIUM';
+    return 'LOW';
   }
 }
