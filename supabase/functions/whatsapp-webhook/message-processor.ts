@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 import { UserContext } from './auth-handler.ts';
 import { generateAIResponse } from './ollama.ts';
 import { sendWhatsAppMessage } from './whatsapp.ts';
+import { OrderProcessor } from './services/order-processor.ts';
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -107,6 +108,21 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
     }
     
     console.log(`Saved incoming message: ${savedMessage.id} for user: ${userContext.userId}`);
+
+    // Check if this is an order confirmation message
+    const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
+      messageId: savedMessage.id,
+      userId: userContext.userId,
+      userName: contactName,
+      whatsappMessageId: message.id,
+      userMessage: extractMessageContent(message)
+    });
+
+    // If the message was handled as an order confirmation, don't process it further
+    if (isOrderConfirmation) {
+      console.log('Message handled as order confirmation, skipping AI processing');
+      return;
+    }
     
     // Get AI settings for the user
     const { data: aiSettings } = await supabase

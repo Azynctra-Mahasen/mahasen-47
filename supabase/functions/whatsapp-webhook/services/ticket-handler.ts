@@ -34,6 +34,59 @@ export class TicketHandler {
     }
   }
 
+  static async createOrderTicket(
+    userId: string,
+    customerName: string,
+    productName: string,
+    quantity: number,
+    whatsappMessageId: string
+  ): Promise<{ success: boolean; ticketId?: number; error?: string }> {
+    try {
+      // Create ticket data object
+      const ticketData = {
+        user_id: userId,
+        title: `Order for ${productName}`,
+        customer_name: customerName,
+        platform: 'whatsapp',
+        type: 'Order',
+        status: 'New',
+        priority: 'HIGH',
+        body: `Product Name: ${productName}\nQuantity: ${quantity}`,
+        whatsapp_message_id: whatsappMessageId,
+        product_info: {
+          product_name: productName,
+          quantity: quantity
+        }
+      };
+
+      // Insert ticket into database
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .insert(ticketData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating order ticket:", error);
+        return { 
+          success: false, 
+          error: error.message 
+        };
+      }
+
+      return { 
+        success: true, 
+        ticketId: ticket.id 
+      };
+    } catch (error) {
+      console.error("Error creating order ticket:", error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
   private static async handleOrderIntent(parsedResponse: any, context: any): Promise<string | null> {
     try {
       const orderInfo = parsedResponse.detected_entities?.order_info;
@@ -42,64 +95,20 @@ export class TicketHandler {
       // Check the order state
       if (orderInfo.state === 'COLLECTING_INFO') {
         // Missing product name, quantity or awaiting confirmation
-        if (!orderInfo.product_name) {
+        if (!orderInfo.product) {
           return "What product would you like to order?";
         }
         
         if (!orderInfo.quantity) {
-          return `How many of the ${orderInfo.product_name} would you like to order?`;
+          return `How many of the ${orderInfo.product} would you like to order?`;
         }
 
-        // Verify product exists
-        const product = await getExactProduct(orderInfo.product_name, context.userId);
-        if (!product) {
-          return `I'm sorry, I couldn't find the product "${orderInfo.product_name}" in our catalog. Please check the product name and try again.`;
-        }
+        // Verify product exists (optional step)
         
         // Ask for confirmation
-        return `You're about to order ${orderInfo.quantity} of ${orderInfo.product_name}. Please type "Yes", "Ow" or "ඔව්" to confirm your order.`;
+        return `You're about to order ${orderInfo.quantity} of ${orderInfo.product}. Please type "Yes", "Ow" or "ඔව්" to confirm your order.`;
       } 
       
-      if (orderInfo.state === 'CONFIRMED') {
-        // Get the exact product information
-        const product = await getExactProduct(orderInfo.product_name, context.userId);
-        if (!product) {
-          return `I'm sorry, I couldn't find the product "${orderInfo.product_name}" in our catalog. Please check the product name and try again.`;
-        }
-
-        // Create ticket
-        const ticketData = {
-          user_id: context.userId, // Make sure to use the user ID
-          title: `Order for ${orderInfo.product_name}`,
-          customer_name: context.userName,
-          platform: context.platform,
-          type: 'Order',
-          status: 'New',
-          priority: 'HIGH',
-          body: `Product Name: ${orderInfo.product_name}\nQuantity: ${orderInfo.quantity}`,
-          conversation_id: context.conversationId,
-          whatsapp_message_id: context.messageId,
-          product_info: {
-            product_id: product.metadata.product_id,
-            product_name: orderInfo.product_name,
-            quantity: orderInfo.quantity
-          }
-        };
-
-        const { data: ticket, error } = await supabase
-          .from('tickets')
-          .insert(ticketData)
-          .select()
-          .single();
-
-        if (error) {
-          console.error("Error creating order ticket:", error);
-          return "Order failed. Please retry with correct Product & Quantity in a bit.";
-        }
-
-        return `Your Order for ${orderInfo.product_name} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticket.id}.`;
-      }
-
       return null;
     } catch (error) {
       console.error("Error handling order intent:", error);
@@ -110,7 +119,7 @@ export class TicketHandler {
   private static async createEscalationTicket(parsedResponse: any, context: any): Promise<string | null> {
     try {
       const ticketData = {
-        user_id: context.userId, // Make sure to use the user ID
+        user_id: context.userId,
         title: `Support Request: ${context.messageContent.substring(0, 50)}...`,
         customer_name: context.userName,
         platform: context.platform,
