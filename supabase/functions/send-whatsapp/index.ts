@@ -65,6 +65,26 @@ serve(async (req) => {
       mediaUrl
     );
     
+    // Don't let logging failures prevent message sending
+    try {
+      // Log successful message send
+      await supabase.from('system_logs').insert({
+        component: 'whatsapp',
+        log_level: 'INFO',
+        message: 'WhatsApp message sent successfully',
+        metadata: {
+          to: to,
+          phone_id: cleanPhoneId,
+          type: type,
+          success: true,
+          message_id: result?.messages?.[0]?.id || null
+        }
+      }).throwOnError();
+    } catch (logError) {
+      // Just log the error but don't fail the request
+      console.error('Error logging success to system_logs:', logError);
+    }
+    
     return new Response(
       JSON.stringify({
         success: true,
@@ -77,6 +97,21 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in send-whatsapp function:', error);
+    
+    // Don't let logging failures prevent response
+    try {
+      await supabase.from('system_logs').insert({
+        component: 'whatsapp',
+        log_level: 'ERROR',
+        message: 'Error sending WhatsApp message',
+        metadata: {
+          error_message: error.message || "Unknown error",
+          stack_trace: error.stack || null,
+        }
+      }).throwOnError();
+    } catch (logError) {
+      console.error('Error logging to system_logs:', logError);
+    }
     
     return new Response(
       JSON.stringify({

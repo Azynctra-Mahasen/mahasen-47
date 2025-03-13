@@ -73,21 +73,25 @@ export async function sendWhatsAppMessage(
     if (!response.ok) {
       console.error('WhatsApp API error:', JSON.stringify(responseData, null, 2));
       
-      // Log error details to database for troubleshooting
-      await supabase.from('system_logs').insert({
-        component: 'whatsapp',
-        log_level: 'ERROR',
-        message: 'WhatsApp API error',
-        metadata: {
-          status: response.status,
-          statusText: response.statusText,
-          error: responseData,
-          request_url: url,
-          phone_id: cleanPhoneId,
-          to: to,
-          type: type,
-        }
-      });
+      // Try to log error details, but don't fail if logging fails
+      try {
+        await supabase.from('system_logs').insert({
+          component: 'whatsapp',
+          log_level: 'ERROR',
+          message: 'WhatsApp API error',
+          metadata: {
+            status: response.status,
+            statusText: response.statusText,
+            error: responseData,
+            request_url: url,
+            phone_id: cleanPhoneId,
+            to: to,
+            type: type,
+          }
+        }).throwOnError();
+      } catch (logError) {
+        console.error('Error logging to system_logs:', logError);
+      }
       
       throw new Error(`WhatsApp API error: ${JSON.stringify(responseData, null, 2)}`);
     }
@@ -97,18 +101,22 @@ export async function sendWhatsAppMessage(
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     
-    // Log error to database
-    await supabase.from('system_logs').insert({
-      component: 'whatsapp',
-      log_level: 'ERROR',
-      message: 'Error sending WhatsApp message',
-      metadata: {
-        error_message: error.message,
-        phone_id: phoneId,
-        to: to,
-        type: type,
-      }
-    });
+    // Try to log error, but don't fail if logging fails
+    try {
+      await supabase.from('system_logs').insert({
+        component: 'whatsapp',
+        log_level: 'ERROR',
+        message: 'Error sending WhatsApp message',
+        metadata: {
+          error_message: error.message,
+          phone_id: phoneId,
+          to: to,
+          type: type,
+        }
+      }).throwOnError();
+    } catch (logError) {
+      console.error('Error logging to system_logs:', logError);
+    }
     
     throw error;
   }

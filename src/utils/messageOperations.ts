@@ -32,19 +32,25 @@ export async function saveMessageToDatabase(
 export async function sendWhatsAppMessage(
   messagePayload: WhatsAppMessage
 ) {
-  // Clean up the phone ID by removing any whitespace
-  if (messagePayload.phoneId) {
-    messagePayload.phoneId = messagePayload.phoneId.trim();
-  }
-  
-  console.log(`Sending WhatsApp message to ${messagePayload.to} using phone ID: ${messagePayload.phoneId}`);
-  
-  return await supabase.functions.invoke(
-    'send-whatsapp',
-    {
-      body: messagePayload,
+  try {
+    // Clean up the phone ID by removing any whitespace
+    if (messagePayload.phoneId) {
+      messagePayload.phoneId = messagePayload.phoneId.trim();
     }
-  );
+    
+    console.log(`Sending WhatsApp message to ${messagePayload.to} using phone ID: ${messagePayload.phoneId}`);
+    
+    // Send the message but don't let logging errors prevent message sending
+    return await supabase.functions.invoke(
+      'send-whatsapp',
+      {
+        body: messagePayload,
+      }
+    );
+  } catch (error) {
+    console.error("Error invoking send-whatsapp function:", error);
+    throw error;
+  }
 }
 
 export async function getWhatsAppSecrets() {
