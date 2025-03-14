@@ -79,7 +79,7 @@ serve(async (req) => {
           success: true,
           message_id: result?.messages?.[0]?.id || null
         }
-      }).throwOnError();
+      });
     } catch (logError) {
       // Just log the error but don't fail the request
       console.error('Error logging success to system_logs:', logError);
@@ -108,7 +108,7 @@ serve(async (req) => {
           error_message: error.message || "Unknown error",
           stack_trace: error.stack || null,
         }
-      }).throwOnError();
+      });
     } catch (logError) {
       console.error('Error logging to system_logs:', logError);
     }

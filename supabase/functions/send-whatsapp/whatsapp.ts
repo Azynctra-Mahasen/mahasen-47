@@ -88,7 +88,7 @@ export async function sendWhatsAppMessage(
             to: to,
             type: type,
           }
-        }).throwOnError();
+        });
       } catch (logError) {
         console.error('Error logging to system_logs:', logError);
       }
@@ -113,7 +113,7 @@ export async function sendWhatsAppMessage(
           to: to,
           type: type,
         }
-      }).throwOnError();
+      });
     } catch (logError) {
       console.error('Error logging to system_logs:', logError);
     }
