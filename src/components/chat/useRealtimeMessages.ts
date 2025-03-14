@@ -42,7 +42,7 @@ export const useRealtimeMessages = (
               event: '*',
               schema: 'public',
               table: 'messages',
-              filter: `conversation_id=eq.${id}` // Corrected filter syntax
+              filter: `conversation_id=eq.${id}` // This filter syntax is correct
             },
             async (payload) => {
               console.log("Received real-time update:", payload);

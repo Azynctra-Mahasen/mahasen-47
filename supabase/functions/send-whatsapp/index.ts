@@ -15,6 +15,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Non-blocking system logging utility for edge function
+ */
+function logSystemEventAsync(
+  component: string, 
+  level: string, 
+  message: string, 
+  metadata: Record<string, any> = {}
+) {
+  // Use waitUntil for background processing
+  try {
+    // @ts-ignore - EdgeRuntime is available in Deno edge functions
+    EdgeRuntime.waitUntil(
+      (async () => {
+        try {
+          await supabase.from('system_logs').insert({
+            component,
+            log_level: level,
+            message,
+            metadata
+          });
+        } catch (logError) {
+          // Just console log errors in the logging system
+          console.error('Failed to write system log:', logError);
+        }
+      })()
+    );
+  } catch (error) {
+    // Fallback if waitUntil isn't available
+    console.error('Error in logging system:', error);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -65,25 +98,19 @@ serve(async (req) => {
       mediaUrl
     );
     
-    // Don't let logging failures prevent message sending
-    try {
-      // Log successful message send
-      await supabase.from('system_logs').insert({
-        component: 'whatsapp',
-        log_level: 'INFO',
-        message: 'WhatsApp message sent successfully',
-        metadata: {
-          to: to,
-          phone_id: cleanPhoneId,
-          type: type,
-          success: true,
-          message_id: result?.messages?.[0]?.id || null
-        }
-      });
-    } catch (logError) {
-      // Just log the error but don't fail the request
-      console.error('Error logging success to system_logs:', logError);
-    }
+    // Log successful message send in a non-blocking way
+    logSystemEventAsync(
+      'whatsapp',
+      'INFO',
+      'WhatsApp message sent successfully',
+      {
+        to: to,
+        phone_id: cleanPhoneId,
+        type: type,
+        success: true,
+        message_id: result?.messages?.[0]?.id || null
+      }
+    );
     
     return new Response(
       JSON.stringify({
@@ -98,20 +125,16 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in send-whatsapp function:', error);
     
-    // Don't let logging failures prevent response
-    try {
-      await supabase.from('system_logs').insert({
-        component: 'whatsapp',
-        log_level: 'ERROR',
-        message: 'Error sending WhatsApp message',
-        metadata: {
-          error_message: error.message || "Unknown error",
-          stack_trace: error.stack || null,
-        }
-      });
-    } catch (logError) {
-      console.error('Error logging to system_logs:', logError);
-    }
+    // Log error in a non-blocking way
+    logSystemEventAsync(
+      'whatsapp',
+      'ERROR',
+      'Error sending WhatsApp message',
+      {
+        error_message: error.message || "Unknown error",
+        stack_trace: error.stack || null,
+      }
+    );
     
     return new Response(
       JSON.stringify({

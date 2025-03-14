@@ -7,6 +7,36 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 /**
+ * Non-blocking system logging utility
+ */
+function logSystemEventAsync(
+  component: string, 
+  level: string, 
+  message: string, 
+  metadata: Record<string, any> = {}
+) {
+  try {
+    // @ts-ignore - EdgeRuntime is available in Deno edge functions
+    EdgeRuntime.waitUntil(
+      (async () => {
+        try {
+          await supabase.from('system_logs').insert({
+            component,
+            log_level: level,
+            message,
+            metadata
+          });
+        } catch (logError) {
+          console.error('Error logging to system_logs:', logError);
+        }
+      })()
+    );
+  } catch (error) {
+    console.error('Error in logging system:', error);
+  }
+}
+
+/**
  * Send a WhatsApp message via the Meta/WhatsApp Cloud API
  */
 export async function sendWhatsAppMessage(
@@ -73,25 +103,21 @@ export async function sendWhatsAppMessage(
     if (!response.ok) {
       console.error('WhatsApp API error:', JSON.stringify(responseData, null, 2));
       
-      // Try to log error details, but don't fail if logging fails
-      try {
-        await supabase.from('system_logs').insert({
-          component: 'whatsapp',
-          log_level: 'ERROR',
-          message: 'WhatsApp API error',
-          metadata: {
-            status: response.status,
-            statusText: response.statusText,
-            error: responseData,
-            request_url: url,
-            phone_id: cleanPhoneId,
-            to: to,
-            type: type,
-          }
-        });
-      } catch (logError) {
-        console.error('Error logging to system_logs:', logError);
-      }
+      // Log error in a non-blocking way
+      logSystemEventAsync(
+        'whatsapp',
+        'ERROR',
+        'WhatsApp API error',
+        {
+          status: response.status,
+          statusText: response.statusText,
+          error: responseData,
+          request_url: url,
+          phone_id: cleanPhoneId,
+          to: to,
+          type: type,
+        }
+      );
       
       throw new Error(`WhatsApp API error: ${JSON.stringify(responseData, null, 2)}`);
     }
@@ -101,22 +127,18 @@ export async function sendWhatsAppMessage(
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     
-    // Try to log error, but don't fail if logging fails
-    try {
-      await supabase.from('system_logs').insert({
-        component: 'whatsapp',
-        log_level: 'ERROR',
-        message: 'Error sending WhatsApp message',
-        metadata: {
-          error_message: error.message,
-          phone_id: phoneId,
-          to: to,
-          type: type,
-        }
-      });
-    } catch (logError) {
-      console.error('Error logging to system_logs:', logError);
-    }
+    // Log error in a non-blocking way
+    logSystemEventAsync(
+      'whatsapp',
+      'ERROR',
+      'Error sending WhatsApp message',
+      {
+        error_message: error.message,
+        phone_id: phoneId,
+        to: to,
+        type: type,
+      }
+    );
     
     throw error;
   }
