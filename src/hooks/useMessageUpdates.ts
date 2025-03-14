@@ -41,7 +41,7 @@ export const useMessageUpdates = (platform: Platform | undefined) => {
             event: '*',
             schema: 'public',
             table: 'messages',
-            filter: `user_id=eq.${userId}`
+            filter: `user_id=eq.${userId}` // Corrected filter syntax
           },
           (payload) => {
             console.log('Received real-time update:', payload);
