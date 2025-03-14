@@ -22,19 +22,14 @@ export const useMessageSending = (
     
     setIsSending(true);
     try {
-      // Step 1: Get WhatsApp configuration
+      // Get WhatsApp configuration
       const secrets = await getWhatsAppSecrets();
-      console.log("Retrieved WhatsApp secrets successfully");
 
-      // Step 2: Save message to database
-      const { data: savedMessage, error: dbError } = await saveMessageToDatabase(id, newMessage);
-      if (dbError) {
-        console.error("Database error:", dbError);
-        throw new Error("Failed to save message: " + dbError.message);
-      }
-      console.log("Message saved to database successfully");
+      // Save message to database
+      const { error: dbError } = await saveMessageToDatabase(id, newMessage);
+      if (dbError) throw dbError;
 
-      // Step 3: Send WhatsApp message
+      // Send WhatsApp message
       const messagePayload: WhatsAppMessage = {
         to: contactNumber,
         message: newMessage,
@@ -45,16 +40,9 @@ export const useMessageSending = (
       };
 
       const { error: whatsappError } = await sendWhatsAppMessage(messagePayload);
-      if (whatsappError) {
-        console.error("WhatsApp sending error:", whatsappError);
-        throw new Error("Failed to send WhatsApp message: " + 
-          (typeof whatsappError === 'string' ? whatsappError : 
-           whatsappError instanceof Error ? whatsappError.message : 
-           "Unknown error"));
-      }
-      console.log("WhatsApp message sent successfully");
+      if (whatsappError) throw whatsappError;
 
-      // Step 4: Update UI
+      // Update UI
       refetchMessages();
       
       toast({
