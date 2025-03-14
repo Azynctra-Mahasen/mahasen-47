@@ -42,7 +42,7 @@ export const useRealtimeMessages = (
               event: '*',
               schema: 'public',
               table: 'messages',
-              filter: `conversation_id=eq.${id} AND user_id=eq.${userId}`
+              filter: `conversation_id=eq.${id}` // This filter syntax is correct
             },
             async (payload) => {
               console.log("Received real-time update:", payload);
@@ -122,8 +122,7 @@ export const useRealtimeMessages = (
           .update({ read: true })
           .eq("conversation_id", id)
           .eq("status", "received")
-          .eq("read", false)
-          .eq("user_id", session.user.id);
+          .eq("read", false);
 
         if (error) {
           console.error("Error marking messages as read:", error);
