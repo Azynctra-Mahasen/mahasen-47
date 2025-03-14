@@ -16,9 +16,17 @@ export async function generateAIResponse(message: string, context: any, aiSettin
       normalize: true,
     });
 
-    // Search knowledge base with the embedding
-    const searchResults = await searchKnowledgeBase(embedding);
-    console.log('Search results:', searchResults);
+    // Validate user ID for proper isolation
+    if (!context.userId) {
+      console.error('No userId provided in context for knowledge base search - this is a critical error');
+      return "Sorry, I'm having trouble accessing your information right now. Please try again later.";
+    }
+
+    console.log(`Processing request for user ID: ${context.userId}`);
+
+    // Search knowledge base with the embedding and user ID
+    const searchResults = await searchKnowledgeBase(embedding, context.userId);
+    console.log(`Search results for user ${context.userId}:`, searchResults);
 
     // Format knowledge base context
     const formattedContext = await formatKnowledgeBaseContext(searchResults);
@@ -71,7 +79,8 @@ async function generateGroqResponse(message: string, context: any, aiSettings: a
       userName: context.userName,
       platform: 'whatsapp',
       messageContent: message,
-      knowledgeBase: context.knowledgeBase
+      knowledgeBase: context.knowledgeBase,
+      userId: context.userId // Ensure we pass the userId to the ticket handler
     });
 
     if (ticketResponse) {
@@ -110,7 +119,8 @@ async function generateGeminiResponse(message: string, context: any, aiSettings:
       userName: context.userName,
       platform: 'whatsapp',
       messageContent: message,
-      knowledgeBase: context.knowledgeBase
+      knowledgeBase: context.knowledgeBase,
+      userId: context.userId // Ensure we pass the userId to the ticket handler
     });
 
     if (ticketResponse) {

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -22,32 +23,40 @@ const AISettings = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState<AIModel>("deepseek-r1-distill-llama-70b");
   const [isModelChangeDisabled, setIsModelChangeDisabled] = useState(false);
+  const [aiSettingsId, setAISettingsId] = useState<number | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        // Get the session first
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
           navigate("/login");
           return;
         }
+        
+        // Get user ID from session
+        const userId = sessionData.session.user.id;
 
-        const { data, error } = await supabase
+        // Fetch AI settings
+        const { data: settingsData, error } = await supabase
           .from('ai_settings')
           .select('*')
-          .single();
+          .eq('user_id', userId)
+          .maybeSingle();
 
-        if (error) {
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows returned" which is fine for new users
           console.error('Error loading AI settings:', error);
           throw error;
         }
 
-        if (data) {
-          setTone(data.tone as AITone);
-          setBehaviour(data.behaviour || "");
-          setContextMemoryLength(data.context_memory_length?.toString() || "2");
-          setConversationTimeout(data.conversation_timeout_hours || 1);
-          setModelName(data.model_name);
+        if (settingsData) {
+          setAISettingsId(settingsData.id);
+          setTone(settingsData.tone as AITone);
+          setBehaviour(settingsData.behaviour || "");
+          setContextMemoryLength(settingsData.context_memory_length?.toString() || "2");
+          setConversationTimeout(settingsData.conversation_timeout_hours || 1);
+          setModelName(settingsData.model_name);
         }
       } catch (error) {
         console.error('Error loading AI settings:', error);
@@ -73,6 +82,16 @@ const AISettings = () => {
   const handleSave = async () => {
     setIsLoading(true);
     try {
+      // Get the session first
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        navigate("/login");
+        return;
+      }
+      
+      // Get user ID from session
+      const userId = sessionData.session.user.id;
+
       const memoryLength = contextMemoryLength === "Disable" ? 0 : parseInt(contextMemoryLength);
       if (isNaN(memoryLength) || memoryLength < 0 || memoryLength > 5) {
         throw new Error("Invalid context memory length");
@@ -82,19 +101,42 @@ const AISettings = () => {
         throw new Error("Conversation timeout must be between 1 and 6 hours");
       }
 
-      const { error } = await supabase
-        .from('ai_settings')
-        .upsert({ 
-          id: 1,
-          tone,
-          behaviour,
-          context_memory_length: memoryLength,
-          conversation_timeout_hours: conversationTimeout,
-          model_name: modelName,
-          updated_at: new Date().toISOString()
-        });
+      const aiSettings = {
+        tone,
+        behaviour,
+        context_memory_length: memoryLength,
+        conversation_timeout_hours: conversationTimeout,
+        model_name: modelName,
+        updated_at: new Date().toISOString(),
+        user_id: userId
+      };
 
-      if (error) throw error;
+      if (aiSettingsId) {
+        // Update existing settings
+        const { error } = await supabase
+          .from('ai_settings')
+          .update(aiSettings)
+          .eq('id', aiSettingsId)
+          .eq('user_id', userId); // Add user_id check for security
+
+        if (error) throw error;
+      } else {
+        // Create new settings without specifying an ID
+        const { data, error } = await supabase
+          .from('ai_settings')
+          .insert({
+            ...aiSettings,
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (error) throw error;
+        
+        if (data) {
+          setAISettingsId(data.id);
+        }
+      }
 
       toast({
         title: "Settings saved",

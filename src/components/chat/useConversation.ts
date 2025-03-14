@@ -16,10 +16,17 @@ export const useConversation = (id: string | undefined) => {
     queryFn: async () => {
       if (!id) throw new Error("Conversation ID is required");
 
+      // Get the current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
       const { data, error } = await supabase
         .from("conversations")
         .select("*")
         .eq("id", id)
+        .eq("user_id", session.user.id)
         .maybeSingle();
 
       if (error) {
@@ -28,7 +35,7 @@ export const useConversation = (id: string | undefined) => {
       }
       
       if (!data) {
-        throw new Error("Conversation not found");
+        throw new Error("Conversation not found or unauthorized access");
       }
       
       return data as Conversation;
@@ -43,10 +50,17 @@ export const useConversation = (id: string | undefined) => {
     queryFn: async () => {
       if (!id) throw new Error("Conversation ID is required");
 
+      // Get the current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
       const { data, error } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", id)
+        .eq("user_id", session.user.id)
         .order("created_at", { ascending: true });
 
       if (error) {

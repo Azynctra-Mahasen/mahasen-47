@@ -11,6 +11,12 @@ export const useConversations = (platform: Platform | undefined) => {
         throw new Error("Invalid platform specified");
       }
 
+      // Get the current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
       const { data: conversationsData, error: conversationsError } = await supabase
         .from("conversations")
         .select(`
@@ -21,7 +27,8 @@ export const useConversations = (platform: Platform | undefined) => {
             status
           )
         `)
-        .eq("platform", platform);
+        .eq("platform", platform)
+        .eq("user_id", session.user.id);
 
       if (conversationsError) throw conversationsError;
 

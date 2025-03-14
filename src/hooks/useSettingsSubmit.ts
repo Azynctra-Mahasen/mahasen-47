@@ -2,6 +2,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 
+// Default verification token for WhatsApp webhook
+const DEFAULT_VERIFY_TOKEN = 'fdgtryt5yt5y5y5@34';
+
 type UserSecrets = {
   whatsapp_phone_id: string;
   whatsapp_verify_token: string;
@@ -27,9 +30,12 @@ export const useSettingsSubmit = () => {
       }
 
       // Validate required WhatsApp fields
-      if (!secrets.whatsapp_phone_id || !secrets.whatsapp_verify_token || !secrets.whatsapp_access_token) {
+      if (!secrets.whatsapp_phone_id || !secrets.whatsapp_access_token) {
         throw new Error("WhatsApp configuration is required");
       }
+
+      // Ensure verify token is set (use default if empty)
+      const verifyToken = secrets.whatsapp_verify_token || DEFAULT_VERIFY_TOKEN;
 
       // Update the user profile
       const { error: profileError } = await supabase
@@ -60,7 +66,7 @@ export const useSettingsSubmit = () => {
         .rpc('store_user_secret', {
           p_user_id: session.user.id,
           p_secret_type: 'whatsapp_verify_token',
-          p_secret_value: secrets.whatsapp_verify_token
+          p_secret_value: verifyToken
         });
 
       if (verifyTokenError) throw verifyTokenError;
@@ -93,7 +99,7 @@ export const useSettingsSubmit = () => {
         .upsert({
           user_id: session.user.id,
           whatsapp_phone_id: secrets.whatsapp_phone_id,
-          whatsapp_verify_token: secrets.whatsapp_verify_token,
+          whatsapp_verify_token: verifyToken,
           whatsapp_access_token: secrets.whatsapp_access_token,
           updated_at: new Date().toISOString()
         }, {

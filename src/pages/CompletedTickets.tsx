@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { TicketList } from "@/components/tickets/TicketList";
 import { TicketHeader } from "@/components/tickets/TicketHeader";
 import { Ticket, TicketType, TicketPriority } from "@/types/ticket";
+import { toast } from "sonner";
 
 const CompletedTickets = () => {
   const navigate = useNavigate();
@@ -18,9 +19,20 @@ const CompletedTickets = () => {
   useEffect(() => {
     const fetchCompletedTickets = async () => {
       try {
+        // Fix the session retrieval pattern
+        const sessionResponse = await supabase.auth.getSession();
+        const session = sessionResponse.data.session;
+        
+        if (!session) {
+          toast.error("Please login to view tickets");
+          navigate("/login");
+          return;
+        }
+
         const { data, error } = await supabase
           .from("tickets")
           .select("*")
+          .eq('user_id', session.user.id)
           .eq('status', 'Completed')
           .order('id', { ascending: true });
 
@@ -42,6 +54,7 @@ const CompletedTickets = () => {
         setTickets(transformedData);
       } catch (error) {
         console.error("Error fetching completed tickets:", error);
+        toast.error("Failed to load completed tickets");
       } finally {
         setLoading(false);
       }
@@ -49,28 +62,37 @@ const CompletedTickets = () => {
 
     fetchCompletedTickets();
 
-    // Subscribe to changes in the tickets table
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tickets',
-          filter: 'status=eq.Completed'
-        },
-        () => {
-          // Refetch tickets when there are changes
-          fetchCompletedTickets();
-        }
-      )
-      .subscribe();
+    // Subscribe to changes in the tickets table for the current user
+    const setupRealtimeSubscription = async () => {
+      const sessionResponse = await supabase.auth.getSession();
+      const session = sessionResponse.data.session;
+      
+      if (!session) return;
 
-    return () => {
-      supabase.removeChannel(channel);
+      const channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tickets',
+            filter: `status=eq.Completed AND user_id=eq.${session.user.id}`
+          },
+          () => {
+            // Refetch tickets when there are changes
+            fetchCompletedTickets();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     };
-  }, []);
+
+    setupRealtimeSubscription();
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8">

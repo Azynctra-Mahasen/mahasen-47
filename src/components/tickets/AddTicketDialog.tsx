@@ -44,6 +44,12 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
   const onSubmit = async (values: TicketFormValues) => {
     setIsSubmitting(true);
     try {
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
       // Create base ticket data
       const ticketData = {
         title: values.title,
@@ -57,7 +63,8 @@ export function AddTicketDialog({ open, onOpenChange, onTicketAdded }: AddTicket
         intent_type: "HUMAN_AGENT_REQUEST",
         escalation_reason: "Customer explicitly requested human agent",
         last_updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        user_id: session.user.id  // Add user_id to ticket data
       };
 
       // Create the ticket first

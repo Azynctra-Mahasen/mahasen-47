@@ -26,6 +26,7 @@ interface Product {
   description: string;
   price: number;
   discounts?: number | null;
+  user_id: string;
 }
 
 interface ProductDialogProps {
@@ -109,20 +110,23 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
   const onSubmit = async (values: ProductFormValues) => {
     setIsSubmitting(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("User not authenticated");
+      }
+      
+      const userId = sessionData.session.user.id;
       const textToEmbed = `${values.title} ${values.description}`;
 
       if (isEditing && product) {
-        // First remove existing embedding
         await removeExistingEmbedding(product.id);
         
-        // Generate new embedding
         const embedding = await generateEmbedding(textToEmbed);
         toast({
           title: "Processing",
           description: "Updating product with new embedding...",
         });
 
-        // Update product with new data and embedding
         const { error: updateError } = await supabase
           .from('products')
           .update({
@@ -131,7 +135,8 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
             price: values.price,
             discounts: values.discounts,
             embedding,
-            embedding_status: 'completed'
+            embedding_status: 'completed',
+            user_id: userId  // Ensure user_id is included in updates
           })
           .eq('id', product.id);
 
@@ -142,7 +147,6 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
           description: "Product updated successfully with new embedding",
         });
       } else {
-        // For new products, generate embedding and insert
         const embedding = await generateEmbedding(textToEmbed);
         toast({
           title: "Processing",
@@ -157,7 +161,8 @@ export function ProductDialog({ open, onOpenChange, onSuccess, product }: Produc
             price: values.price,
             discounts: values.discounts,
             embedding,
-            embedding_status: 'completed'
+            embedding_status: 'completed',
+            user_id: userId
           });
 
         if (insertError) throw insertError;

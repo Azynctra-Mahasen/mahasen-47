@@ -30,23 +30,22 @@ export const useProfile = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        // Get current session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          throw new Error("Error fetching session: " + sessionError.message);
-        }
-
-        if (!session) {
+        // Get the session first
+        const sessionResponse = await supabase.auth.getSession();
+        if (!sessionResponse.data.session) {
           navigate("/login");
           return;
         }
+        
+        // Get user ID and email from session
+        const userId = sessionResponse.data.session.user.id;
+        const userEmail = sessionResponse.data.session.user.email;
 
         // Fetch profile data
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('username, profile_url, whatsapp_number')
-          .eq('id', session.user.id)
+          .eq('id', userId)
           .single();
 
         if (profileError) {
@@ -55,8 +54,8 @@ export const useProfile = () => {
             const { error: insertError } = await supabase
               .from('profiles')
               .insert({
-                id: session.user.id,
-                username: session.user.email?.split('@')[0] || 'user',
+                id: userId,
+                username: userEmail?.split('@')[0] || 'user',
                 whatsapp_number: ""
               });
 
@@ -70,7 +69,7 @@ export const useProfile = () => {
 
         if (profileData) {
           setUsername(profileData.username ?? "");
-          setEmail(session.user.email ?? "");
+          setEmail(userEmail ?? "");
           setWhatsappNumber(profileData.whatsapp_number ?? "");
           setProfileUrl(profileData.profile_url ?? "");
         }
@@ -82,7 +81,7 @@ export const useProfile = () => {
         const { data: secretsData, error: secretsError } = await supabase
           .from('decrypted_user_secrets')
           .select('secret_type, secret_value')
-          .eq('user_id', session.user.id);
+          .eq('user_id', userId);
 
         if (secretsError) {
           throw new Error("Error fetching secrets: " + secretsError.message);
@@ -106,7 +105,7 @@ export const useProfile = () => {
         const { data: platformSecrets, error: platformSecretsError } = await supabase
           .from('platform_secrets')
           .select('id')
-          .eq('user_id', session.user.id)
+          .eq('user_id', userId)
           .single();
 
         if (platformSecretsError && platformSecretsError.code === 'PGRST116') {
@@ -114,7 +113,7 @@ export const useProfile = () => {
           await supabase
             .from('platform_secrets')
             .insert({
-              user_id: session.user.id,
+              user_id: userId,
               whatsapp_phone_id: secretsMap.whatsapp_phone_id || "",
               whatsapp_verify_token: secretsMap.whatsapp_verify_token || "",
               whatsapp_access_token: secretsMap.whatsapp_access_token || ""

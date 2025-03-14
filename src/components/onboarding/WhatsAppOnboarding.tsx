@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Key, Phone, ArrowRight, CheckCircle2 } from "lucide-react";
 
+// Default verification token for WhatsApp webhook
+const DEFAULT_VERIFY_TOKEN = 'fdgtryt5yt5y5y5@34';
+
 type OnboardingStep = "welcome" | "whatsapp-number" | "whatsapp-config" | "completion";
 
 export const WhatsAppOnboarding = () => {
@@ -17,7 +21,7 @@ export const WhatsAppOnboarding = () => {
   const [loading, setLoading] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [phoneId, setPhoneId] = useState("");
-  const [verifyToken, setVerifyToken] = useState("");
+  const [verifyToken, setVerifyToken] = useState(DEFAULT_VERIFY_TOKEN);
   const [accessToken, setAccessToken] = useState("");
 
   // Check if user has already completed onboarding when component mounts

@@ -1,33 +1,17 @@
 
-// Follow this setup guide to integrate the Deno standard library
-// https://deno.land/manual/examples/module_metadata#module-metadata
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { 
-  authenticateWebhookUser, 
-  extractPhoneNumberId,
-  getUserByPhoneId
-} from "./auth-handler.ts";
+import { authenticateWhatsAppUser } from "./auth-handler.ts";
+import { processMessage } from "./message-processor.ts";
 
-// Define CORS headers
+// Set up CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-export const errorResponse = (message: string, status = 400) => {
-  return new Response(
-    JSON.stringify({
-      error: message,
-    }),
-    {
-      status,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
-    }
-  );
-};
+// Default verification token
+const DEFAULT_VERIFY_TOKEN = 'fdgtryt5yt5y5y5@34';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -35,88 +19,89 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    // Handle GET requests for webhook verification
-    if (req.method === 'GET') {
-      const url = new URL(req.url);
-      
-      // Extract query params
-      const mode = url.searchParams.get('hub.mode');
-      const token = url.searchParams.get('hub.verify_token');
-      const challenge = url.searchParams.get('hub.challenge');
-      
-      // The webhook is being verified - handle verification
-      if (mode === 'subscribe' && token && challenge) {
-        console.log('Verification request received');
-        
-        // Extract the WhatsApp phone ID from the querystring
-        const phoneIdParam = url.searchParams.get('phone_id');
-        if (!phoneIdParam) {
-          console.error('No phone_id provided in verification request');
-          return errorResponse('Missing phone_id parameter', 400);
-        }
-        
-        // Get the user with this phone ID
-        const userContext = await getUserByPhoneId(phoneIdParam);
-        
-        if (!userContext) {
-          console.error('No user found for the given phone_id');
-          return errorResponse('Invalid verification request', 403);
-        }
-        
-        // Validate the verification token
-        if (token === userContext.whatsappVerifyToken) {
-          console.log('Webhook verified successfully');
-          return new Response(challenge, {
-            headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
-          });
-        } else {
-          console.error('Token validation failed');
-          return errorResponse('Invalid verification token', 403);
-        }
-      }
-      
-      return errorResponse('Invalid verification request', 400);
+  // Verify webhook
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const mode = url.searchParams.get('hub.mode');
+    const token = url.searchParams.get('hub.verify_token');
+    const challenge = url.searchParams.get('hub.challenge');
+
+    console.log("Webhook verification request received:", { mode, token, challenge });
+
+    // Get the verify token from env or use default
+    const verifyToken = Deno.env.get('VERIFY_TOKEN') || DEFAULT_VERIFY_TOKEN;
+
+    if (mode === 'subscribe' && token === verifyToken) {
+      console.log("Webhook verified");
+      return new Response(challenge, {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+      });
     }
-    
-    // Handle POST requests for incoming messages
-    if (req.method === 'POST') {
-      let payload;
-      try {
-        payload = await req.json();
-        console.log('WhatsApp API payload:', JSON.stringify(payload));
-      } catch (error) {
-        console.error('Error parsing request body:', error);
-        return errorResponse('Invalid request body', 400);
+
+    console.log("Webhook verification failed");
+    return new Response('Verification failed', { status: 403, headers: corsHeaders });
+  }
+
+  // Handle incoming webhook events
+  if (req.method === 'POST') {
+    try {
+      const body = await req.json();
+      console.log("Received webhook event:", JSON.stringify(body, null, 2));
+
+      // Extract the event data
+      const entry = body.entry[0];
+      if (!entry || !entry.changes || !entry.changes[0]) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid webhook data structure' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
+
+      const change = entry.changes[0];
+      const value = change.value;
       
-      // Authenticate the user based on the message payload
-      const userContext = await authenticateWebhookUser(payload);
+      if (!value || !value.metadata || !value.metadata.phone_number_id) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Missing phone_number_id in metadata' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const phoneNumberId = value.metadata.phone_number_id;
+      console.log("Processing message for phone_number_id:", phoneNumberId);
       
+      // Authenticate the WhatsApp user
+      const userContext = await authenticateWhatsAppUser(phoneNumberId);
       if (!userContext) {
-        console.error('Failed to authenticate webhook user');
-        return errorResponse('Failed to authenticate webhook user', 401);
+        console.error(`Failed to authenticate user for phone_number_id: ${phoneNumberId}`);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Authentication failed' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
       
-      console.log(`Processing webhook for user: ${userContext.userId}`);
-      
-      // Here is where you would implement the actual message handling logic
-      // Return a simple success response for now
+      console.log(`Authenticated user ${userContext.userId} for phone_number_id ${phoneNumberId}`);
+
+      // Process the message
+      await processMessage(value, userContext);
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          userId: userContext.userId
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
+        JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (error) {
+      console.error("Error processing webhook:", error);
+      return new Response(
+        JSON.stringify({ success: false, error: error.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
-    // Return method not allowed for other HTTP methods
-    return errorResponse('Method not allowed', 405);
-  } catch (error) {
-    console.error('Error processing webhook:', error);
-    return errorResponse(`Internal Server Error: ${error.message}`, 500);
   }
+
+  // Method not allowed
+  return new Response(
+    JSON.stringify({ success: false, error: 'Method not allowed' }),
+    { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 });

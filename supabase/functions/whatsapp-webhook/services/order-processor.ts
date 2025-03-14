@@ -48,51 +48,47 @@ export class OrderProcessor {
       const orderInfo: PendingOrder = JSON.parse(pendingOrder.context);
       console.log('Found pending order:', orderInfo);
 
+      // Update order state to PROCESSING
+      const updatedOrderInfo = {
+        ...orderInfo,
+        state: 'PROCESSING'
+      };
+
       // Create ticket with the exact stored order information
-      const ticketResponse = await TicketHandler.handleTicketCreation(
-        {
-          intent: 'ORDER_PLACEMENT',
-          confidence: 1,
-          requires_escalation: false,
-          escalation_reason: null,
-          detected_entities: {
-            product_mentions: [orderInfo.product],
-            issue_type: null,
-            urgency_level: 'medium',
-            order_info: {
-              ...orderInfo,
-              state: 'PROCESSING',
-              confirmed: true
-            }
-          }
-        },
-        {
-          messageId: context.whatsappMessageId,
-          conversationId: context.userId,
-          userName: context.userName,
-          platform: 'whatsapp',
-          messageContent: `Order confirmation for ${orderInfo.product}`
-        }
+      const ticketResponse = await TicketHandler.createOrderTicket(
+        context.userId,
+        context.userName,
+        updatedOrderInfo.product,
+        updatedOrderInfo.quantity,
+        context.whatsappMessageId
       );
 
-      // Delete the pending order only after successful ticket creation
-      if (ticketResponse) {
+      if (ticketResponse.success) {
+        // Delete the pending order after successful ticket creation
         await supabase
           .from('conversation_contexts')
           .delete()
           .eq('conversation_id', context.userId)
           .eq('context_type', 'pending_order');
 
+        // Send order confirmation message
         await sendWhatsAppMessage(
           context.userId,
-          ticketResponse,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!,
-          Deno.env.get('WHATSAPP_PHONE_ID')!
+          `Your Order for ${updatedOrderInfo.product} for ${updatedOrderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
+          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        );
+        return true;
+      } else {
+        // Send order failure message
+        await sendWhatsAppMessage(
+          context.userId,
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
         );
         return true;
       }
-
-      return false;
     } catch (parseError) {
       console.error('Error parsing pending order:', parseError);
       return false;
@@ -131,6 +127,6 @@ export class OrderProcessor {
 
   private static isConfirmationMessage(message: string): boolean {
     const confirmationWords = ['yes', 'ow', 'ඔව්'];
-    return confirmationWords.includes(message.toLowerCase().trim());
+    return confirmationWords.some(word => message.toLowerCase().trim() === word);
   }
 }

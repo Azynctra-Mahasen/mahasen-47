@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 import { UserContext } from './auth-handler.ts';
 import { generateAIResponse } from './ollama.ts';
 import { sendWhatsAppMessage } from './whatsapp.ts';
+import { OrderProcessor } from './services/order-processor.ts';
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -16,24 +17,30 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
  */
 export async function processMessage(payload: any, userContext: UserContext) {
   try {
-    // Extract the message from the payload
-    const value = payload?.entry?.[0]?.changes?.[0]?.value;
-    
-    if (!value || value.messaging_product !== 'whatsapp') {
+    // Validate payload
+    if (!payload || payload.messaging_product !== 'whatsapp') {
       console.log('Not a WhatsApp message or invalid payload');
       return;
     }
     
-    const messages = value.messages || [];
+    const messages = payload.messages || [];
     
     if (messages.length === 0) {
       console.log('No messages in the payload');
       return;
     }
     
+    // Ensure we have a valid user ID from context
+    if (!userContext.userId) {
+      console.error('No userId provided in userContext, cannot process message');
+      return;
+    }
+
+    console.log(`Processing messages for user ${userContext.userId}`);
+    
     // Process each message in the payload
     for (const message of messages) {
-      await handleMessage(message, value, userContext);
+      await handleMessage(message, payload, userContext);
     }
   } catch (error) {
     console.error('Error processing webhook message:', error);
@@ -100,7 +107,22 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
       return;
     }
     
-    console.log(`Saved incoming message: ${savedMessage.id}`);
+    console.log(`Saved incoming message: ${savedMessage.id} for user: ${userContext.userId}`);
+
+    // Check if this is an order confirmation message
+    const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
+      messageId: savedMessage.id,
+      userId: userContext.userId,
+      userName: contactName,
+      whatsappMessageId: message.id,
+      userMessage: extractMessageContent(message)
+    });
+
+    // If the message was handled as an order confirmation, don't process it further
+    if (isOrderConfirmation) {
+      console.log('Message handled as order confirmation, skipping AI processing');
+      return;
+    }
     
     // Get AI settings for the user
     const { data: aiSettings } = await supabase
@@ -123,12 +145,14 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
         const messageHistory = await getConversationHistory(conversationId);
         
         const context = {
-          userId: userContext.userId,
+          userId: userContext.userId, // Include user ID in context
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,
           messageHistory: messageHistory
         };
+        
+        console.log(`Generating AI response with context for user: ${userContext.userId}`);
         
         // Generate AI response
         const aiResponse = await generateAIResponse(
@@ -198,6 +222,8 @@ async function getOrCreateConversation(
   contactNumber: string
 ): Promise<string> {
   try {
+    console.log(`Getting or creating conversation for user ${userId} and contact ${contactNumber}`);
+    
     // Check if conversation exists
     const { data: existingConversation } = await supabase
       .from('conversations')
@@ -207,6 +233,7 @@ async function getOrCreateConversation(
       .single();
     
     if (existingConversation) {
+      console.log(`Found existing conversation: ${existingConversation.id}`);
       return existingConversation.id;
     }
     
@@ -228,6 +255,7 @@ async function getOrCreateConversation(
       throw error;
     }
     
+    console.log(`Created new conversation: ${newConversation.id}`);
     return newConversation.id;
   } catch (error) {
     console.error('Error in getOrCreateConversation:', error);

@@ -6,102 +6,130 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Define the UserContext interface
 export interface UserContext {
   userId: string;
   whatsappPhoneId: string;
   whatsappAccessToken: string;
-  whatsappVerifyToken: string;
 }
 
 /**
- * Get user by their WhatsApp phone ID
+ * Find the user associated with a WhatsApp phone ID
  * @param phoneNumberId The WhatsApp phone number ID from the webhook payload
+ * @returns The user ID or null if not found
  */
-export async function getUserByPhoneId(phoneNumberId: string): Promise<UserContext | null> {
+export async function findUserByWhatsAppPhoneId(phoneNumberId: string): Promise<string | null> {
   try {
-    console.log(`Looking up user for WhatsApp phone ID: ${phoneNumberId}`);
+    // Trim whitespace from the phone number ID for comparison
+    const cleanPhoneNumberId = phoneNumberId.trim();
     
-    // Get all secrets that match this phone ID
-    const { data: secretsData, error: secretsError } = await supabase
+    console.log("Looking for user with WhatsApp phone ID:", cleanPhoneNumberId);
+    
+    // First try an exact match
+    const { data: secrets, error } = await supabase
       .from('platform_secrets')
-      .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token')
-      .eq('whatsapp_phone_id', phoneNumberId);
+      .select('user_id, whatsapp_phone_id')
+      .eq('whatsapp_phone_id', cleanPhoneNumberId);
     
-    if (secretsError) {
-      console.error('Error fetching platform secrets:', secretsError);
+    if (error) {
+      console.error("Error finding user by WhatsApp phone ID:", error.message);
       return null;
     }
     
-    if (!secretsData || secretsData.length === 0) {
-      console.error('No user found with the given WhatsApp phone ID');
-      return null;
+    // If exact match found, return the user ID
+    if (secrets && secrets.length > 0) {
+      console.log("Found user by exact match:", secrets[0].user_id);
+      return secrets[0].user_id;
     }
     
-    // Take the most recently updated user if there are multiple matches
-    // Sort the records by updated_at in descending order (most recent first)
-    const { data: sortedData, error: sortError } = await supabase
+    // If no exact match, try with trimmed values from the database
+    const { data: allSecrets, error: allSecretsError } = await supabase
       .from('platform_secrets')
-      .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token, updated_at')
-      .eq('whatsapp_phone_id', phoneNumberId)
-      .order('updated_at', { ascending: false })
-      .limit(1);
-      
-    if (sortError || !sortedData || sortedData.length === 0) {
-      console.error('Error getting the most recent platform secret:', sortError);
+      .select('user_id, whatsapp_phone_id');
+    
+    if (allSecretsError) {
+      console.error("Error fetching all platform secrets:", allSecretsError.message);
       return null;
     }
     
-    const mostRecentRecord = sortedData[0];
+    // Find a match with trimmed values
+    const matchingSecret = allSecrets?.find(secret => 
+      secret.whatsapp_phone_id && secret.whatsapp_phone_id.trim() === cleanPhoneNumberId
+    );
     
-    // Create user context from the most recent record
+    if (matchingSecret) {
+      console.log("Found user by trimmed match:", matchingSecret.user_id);
+      return matchingSecret.user_id;
+    }
+    
+    console.error(`No user found for WhatsApp phone ID: ${phoneNumberId}`);
+    return null;
+  } catch (error) {
+    console.error("Error in findUserByWhatsAppPhoneId:", error);
+    return null;
+  }
+}
+
+/**
+ * Get platform secrets for a user
+ * @param userId The user ID
+ * @returns The platform secrets or null if not found
+ */
+export async function getUserPlatformSecrets(userId: string) {
+  try {
+    console.log(`Getting platform secrets for user: ${userId}`);
+    
+    const { data, error } = await supabase
+      .from('platform_secrets')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      console.error("Error fetching platform secrets:", error.message);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Error in getUserPlatformSecrets:", error);
+    return null;
+  }
+}
+
+/**
+ * Authenticate and create a user context
+ * @param phoneNumberId The WhatsApp phone number ID from the webhook payload
+ * @returns The user context or null if authentication fails
+ */
+export async function authenticateWhatsAppUser(phoneNumberId: string): Promise<UserContext | null> {
+  try {
+    // Find the user ID by phone number ID
+    const userId = await findUserByWhatsAppPhoneId(phoneNumberId);
+    if (!userId) {
+      console.error("No user found for WhatsApp phone ID:", phoneNumberId);
+      return null;
+    }
+    
+    // Get the user's platform secrets
+    const secrets = await getUserPlatformSecrets(userId);
+    if (!secrets) {
+      console.error("No platform secrets found for user:", userId);
+      return null;
+    }
+    
+    // Create and return the user context
     const userContext: UserContext = {
-      userId: mostRecentRecord.user_id,
-      whatsappPhoneId: mostRecentRecord.whatsapp_phone_id || '',
-      whatsappAccessToken: mostRecentRecord.whatsapp_access_token || '',
-      whatsappVerifyToken: mostRecentRecord.whatsapp_verify_token || '',
+      userId,
+      whatsappPhoneId: secrets.whatsapp_phone_id || '',
+      whatsappAccessToken: secrets.whatsapp_access_token || ''
     };
     
-    console.log(`Found user: ${userContext.userId} for WhatsApp phone ID: ${phoneNumberId}`);
+    console.log(`Successfully authenticated user ${userId} for WhatsApp phone ID ${phoneNumberId}`);
+    
     return userContext;
   } catch (error) {
-    console.error('Error in getUserByPhoneId:', error);
+    console.error("Error authenticating WhatsApp user:", error);
     return null;
   }
-}
-
-/**
- * Extract the WhatsApp phone number ID from the webhook payload
- * @param payload The webhook payload
- */
-export function extractPhoneNumberId(payload: any): string | null {
-  try {
-    // Extract phone_number_id from WhatsApp webhook payload
-    const phoneNumberId = payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
-    
-    if (!phoneNumberId) {
-      console.error('Could not extract phone_number_id from payload:', JSON.stringify(payload));
-      return null;
-    }
-    
-    return phoneNumberId;
-  } catch (error) {
-    console.error('Error extracting phone_number_id:', error);
-    return null;
-  }
-}
-
-/**
- * Authenticate the user based on WhatsApp webhook payload
- * @param payload The webhook payload
- */
-export async function authenticateWebhookUser(payload: any): Promise<UserContext | null> {
-  // Extract phone number ID from payload
-  const phoneNumberId = extractPhoneNumberId(payload);
-  
-  if (!phoneNumberId) {
-    return null;
-  }
-  
-  // Look up user by phone ID
-  return await getUserByPhoneId(phoneNumberId);
 }
