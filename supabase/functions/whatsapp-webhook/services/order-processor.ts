@@ -4,10 +4,9 @@ import { TicketHandler } from './ticket-handler.ts';
 import { sendWhatsAppMessage } from '../whatsapp.ts';
 import { UserContext } from '../auth-handler.ts';
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-);
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 interface OrderContext {
   messageId: string;
@@ -55,11 +54,43 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
+      // Get the phone_number_id from the current message
+      const { data: messageData } = await supabase
+        .from('messages')
+        .select('whatsapp_message_id')
+        .eq('id', context.messageId)
+        .maybeSingle();
+
+      // Extract the phone_number_id from the webhook message data
+      let phoneNumberId = '';
+      if (messageData?.whatsapp_message_id) {
+        try {
+          // Try to get the metadata from the message
+          const { data: messageMeta } = await supabase
+            .from('message_metadata')
+            .select('metadata')
+            .eq('message_id', context.messageId)
+            .maybeSingle();
+            
+          if (messageMeta?.metadata && typeof messageMeta.metadata === 'object') {
+            phoneNumberId = messageMeta.metadata.phone_number_id || '';
+          }
+        } catch (e) {
+          console.error('Error getting message metadata:', e);
+        }
+      }
+
+      // If we couldn't get the phone_number_id from the message, use the environment variable
+      if (!phoneNumberId) {
+        phoneNumberId = Deno.env.get('WHATSAPP_PHONE_ID') || '';
+        console.log('Using default WHATSAPP_PHONE_ID:', phoneNumberId);
+      }
+
       // Get the authenticated user context based on the WhatsApp Phone ID
       const { data: platformSecret, error: secretError } = await supabase
         .from('platform_secrets')
-        .select('user_id, whatsapp_phone_id')
-        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
+        .select('user_id, whatsapp_phone_id, whatsapp_access_token')
+        .eq('whatsapp_phone_id', phoneNumberId)
         .maybeSingle();
 
       if (secretError) {
@@ -67,7 +98,7 @@ export class OrderProcessor {
         await sendWhatsAppMessage(
           context.userId,
           "Order failed. Please retry with correct Product & Quantity in a bit.",
-          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          phoneNumberId,
           Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
         );
         return true;
@@ -78,13 +109,22 @@ export class OrderProcessor {
         await sendWhatsAppMessage(
           context.userId,
           "Order failed. Please retry with correct Product & Quantity in a bit.",
-          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          phoneNumberId,
           Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
         );
         return true;
       }
 
       console.log('Creating ticket with authenticated user ID:', platformSecret.user_id);
+
+      // Update conversation_contexts with the updated order info
+      await supabase
+        .from('conversation_contexts')
+        .update({
+          context: JSON.stringify(updatedOrderInfo)
+        })
+        .eq('conversation_id', context.userId)
+        .eq('context_type', 'pending_order');
 
       // Create ticket with the exact stored order information
       const ticketResponse = await TicketHandler.createOrderTicket(
@@ -107,8 +147,8 @@ export class OrderProcessor {
         await sendWhatsAppMessage(
           context.userId,
           `Your Order for ${updatedOrderInfo.product} for ${updatedOrderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
-          Deno.env.get('WHATSAPP_PHONE_ID')!,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+          platformSecret.whatsapp_phone_id,
+          platformSecret.whatsapp_access_token
         );
         return true;
       } else {
@@ -117,8 +157,8 @@ export class OrderProcessor {
         await sendWhatsAppMessage(
           context.userId,
           "Order failed. Please retry with correct Product & Quantity in a bit.",
-          Deno.env.get('WHATSAPP_PHONE_ID')!,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+          platformSecret.whatsapp_phone_id,
+          platformSecret.whatsapp_access_token
         );
         return true;
       }

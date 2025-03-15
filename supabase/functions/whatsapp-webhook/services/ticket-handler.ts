@@ -3,8 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getExactProduct } from "./knowledge-base.ts";
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export class TicketHandler {
   static async handleTicketCreation(parsedResponse: any, context: any): Promise<string | null> {
@@ -121,11 +121,34 @@ export class TicketHandler {
 
   private static async createEscalationTicket(parsedResponse: any, context: any): Promise<string | null> {
     try {
+      // Get the phone_number_id from the message metadata
+      let phoneNumberId = '';
+      try {
+        // Try to get the metadata from the message
+        const { data: messageMeta } = await supabase
+          .from('message_metadata')
+          .select('metadata')
+          .eq('message_id', context.messageId)
+          .maybeSingle();
+          
+        if (messageMeta?.metadata && typeof messageMeta.metadata === 'object') {
+          phoneNumberId = messageMeta.metadata.phone_number_id || '';
+        }
+      } catch (e) {
+        console.error('Error getting message metadata:', e);
+      }
+
+      // If we couldn't get the phone_number_id from the message, use the environment variable
+      if (!phoneNumberId) {
+        phoneNumberId = Deno.env.get('WHATSAPP_PHONE_ID') || '';
+        console.log('Using default WHATSAPP_PHONE_ID for escalation ticket:', phoneNumberId);
+      }
+
       // Get the actual user_id associated with this phone ID for proper isolation
       const { data: platformSecret, error: secretError } = await supabase
         .from('platform_secrets')
         .select('user_id')
-        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
+        .eq('whatsapp_phone_id', phoneNumberId)
         .maybeSingle();
 
       if (secretError) {

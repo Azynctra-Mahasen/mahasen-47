@@ -109,10 +109,31 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
     
     console.log(`Saved incoming message: ${savedMessage.id} for user: ${userContext.userId}`);
 
+    // Store message metadata including phone_number_id
+    try {
+      const metadataPayload = {
+        message_id: savedMessage.id,
+        metadata: {
+          phone_number_id: userContext.whatsappPhoneId,
+          message_type: message.type
+        }
+      };
+      
+      const { error: metadataError } = await supabase
+        .from('message_metadata')
+        .insert(metadataPayload);
+        
+      if (metadataError) {
+        console.error('Error saving message metadata:', metadataError);
+      }
+    } catch (metadataError) {
+      console.error('Error saving message metadata:', metadataError);
+    }
+
     // Check if this is an order confirmation message
     const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
       messageId: savedMessage.id,
-      userId: userContext.userId,
+      userId: contactNumber, // This is actually the conversation identifier
       userName: contactName,
       whatsappMessageId: message.id,
       userMessage: extractMessageContent(message)
