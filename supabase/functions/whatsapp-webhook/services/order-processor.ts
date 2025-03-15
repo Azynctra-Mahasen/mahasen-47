@@ -29,7 +29,8 @@ export class OrderProcessor {
       return false;
     }
 
-    console.log('Checking for pending order for user:', context.userId);
+    console.log('Confirmation message detected:', context.userMessage);
+    console.log('Checking for pending order for conversation:', context.userId);
 
     // Get the pending order from conversation_contexts
     const { data: pendingOrder, error } = await supabase
@@ -54,30 +55,21 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
-      // Get the phone_number_id from the current message
-      const { data: messageData } = await supabase
-        .from('messages')
-        .select('whatsapp_message_id')
-        .eq('id', context.messageId)
-        .maybeSingle();
-
-      // Extract the phone_number_id from the webhook message data
+      // Extract the phone_number_id from the metadata
       let phoneNumberId = '';
-      if (messageData?.whatsapp_message_id) {
-        try {
-          // Try to get the metadata from the message
-          const { data: messageMeta } = await supabase
-            .from('message_metadata')
-            .select('metadata')
-            .eq('message_id', context.messageId)
-            .maybeSingle();
+      try {
+        const { data: messageMeta } = await supabase
+          .from('message_metadata')
+          .select('metadata')
+          .eq('message_id', context.messageId)
+          .maybeSingle();
             
-          if (messageMeta?.metadata && typeof messageMeta.metadata === 'object') {
-            phoneNumberId = messageMeta.metadata.phone_number_id || '';
-          }
-        } catch (e) {
-          console.error('Error getting message metadata:', e);
+        if (messageMeta?.metadata && typeof messageMeta.metadata === 'object') {
+          phoneNumberId = messageMeta.metadata.phone_number_id || '';
+          console.log('Retrieved phone_number_id from metadata:', phoneNumberId);
         }
+      } catch (e) {
+        console.error('Error getting message metadata:', e);
       }
 
       // If we couldn't get the phone_number_id from the message, use the environment variable
@@ -105,7 +97,7 @@ export class OrderProcessor {
       }
 
       if (!platformSecret?.user_id) {
-        console.error('No user_id found for this WhatsApp phone ID');
+        console.error('No user_id found for this WhatsApp phone ID:', phoneNumberId);
         await sendWhatsAppMessage(
           context.userId,
           "Order failed. Please retry with correct Product & Quantity in a bit.",
@@ -115,7 +107,7 @@ export class OrderProcessor {
         return true;
       }
 
-      console.log('Creating ticket with authenticated user ID:', platformSecret.user_id);
+      console.log('Authenticated user ID for ticket creation:', platformSecret.user_id);
 
       // Update conversation_contexts with the updated order info
       await supabase
@@ -134,6 +126,8 @@ export class OrderProcessor {
         updatedOrderInfo.quantity,
         context.whatsappMessageId
       );
+
+      console.log('Ticket creation response:', ticketResponse);
 
       if (ticketResponse.success) {
         // Delete the pending order after successful ticket creation
@@ -175,7 +169,7 @@ export class OrderProcessor {
   }
 
   static async storePendingOrder(userId: string, orderInfo: any): Promise<void> {
-    console.log('Storing new pending order:', orderInfo);
+    console.log('Storing new pending order for conversation:', userId, orderInfo);
 
     // Delete any existing pending orders first
     await supabase
@@ -202,10 +196,15 @@ export class OrderProcessor {
       console.error('Error storing pending order:', error);
       throw error;
     }
+    
+    console.log('Successfully stored pending order for conversation:', userId);
   }
 
   private static isConfirmationMessage(message: string): boolean {
     const confirmationWords = ['yes', 'ow', 'ඔව්'];
-    return confirmationWords.some(word => message.toLowerCase().trim() === word);
+    const normalizedMessage = message.toLowerCase().trim();
+    const isConfirmation = confirmationWords.some(word => normalizedMessage === word);
+    console.log(`Message "${message}" is confirmation: ${isConfirmation}`);
+    return isConfirmation;
   }
 }

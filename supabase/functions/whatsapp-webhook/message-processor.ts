@@ -125,12 +125,14 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
         
       if (metadataError) {
         console.error('Error saving message metadata:', metadataError);
+      } else {
+        console.log('Successfully saved message metadata with phone_number_id:', userContext.whatsappPhoneId);
       }
     } catch (metadataError) {
       console.error('Error saving message metadata:', metadataError);
     }
 
-    // Check if this is an order confirmation message
+    // Check if this is an order confirmation message - This is handled directly without LLM
     const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
       messageId: savedMessage.id,
       userId: contactNumber, // This is actually the conversation identifier
@@ -170,8 +172,10 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,
+          messageContent: extractMessageContent(message),
           messageHistory: messageHistory,
-          whatsappPhoneId: userContext.whatsappPhoneId
+          whatsappPhoneId: userContext.whatsappPhoneId,
+          platform: 'whatsapp'
         };
         
         console.log(`Generating AI response with context for user: ${userContext.userId}`);

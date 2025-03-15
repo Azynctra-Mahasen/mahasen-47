@@ -44,6 +44,16 @@ export class TicketHandler {
     try {
       console.log(`Creating order ticket for user: ${userId}, product: ${productName}, quantity: ${quantity}`);
       
+      if (!userId) {
+        console.error("Missing userId when creating order ticket");
+        return { success: false, error: "Missing required user ID" };
+      }
+      
+      if (!productName || !quantity) {
+        console.error("Missing product or quantity when creating order ticket");
+        return { success: false, error: "Missing product or quantity information" };
+      }
+      
       // Create ticket data object with proper user_id field
       const ticketData = {
         user_id: userId,
