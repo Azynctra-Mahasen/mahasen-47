@@ -24,3 +24,10 @@ USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own tickets" 
 ON tickets FOR DELETE 
 USING (auth.uid() = user_id);
+
+-- Ensure user_id is not nullable
+ALTER TABLE tickets 
+ALTER COLUMN user_id SET NOT NULL;
+
+-- Add index on user_id for better query performance
+CREATE INDEX IF NOT EXISTS tickets_user_id_idx ON tickets(user_id);

@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { TicketHandler } from './ticket-handler.ts';
 import { sendWhatsAppMessage } from '../whatsapp.ts';
+import { UserContext } from '../auth-handler.ts';
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -54,29 +55,40 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
-      // Get the actual user_id associated with this phone ID for proper isolation
+      // Get the authenticated user context based on the WhatsApp Phone ID
       const { data: platformSecret, error: secretError } = await supabase
         .from('platform_secrets')
-        .select('user_id')
+        .select('user_id, whatsapp_phone_id')
         .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
         .maybeSingle();
 
       if (secretError) {
         console.error('Error fetching user_id from platform_secrets:', secretError);
-        return false;
+        await sendWhatsAppMessage(
+          context.userId,
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        );
+        return true;
       }
 
-      const authenticatedUserId = platformSecret?.user_id;
-      console.log('Authenticated user ID for this platform:', authenticatedUserId);
-
-      if (!authenticatedUserId) {
+      if (!platformSecret?.user_id) {
         console.error('No user_id found for this WhatsApp phone ID');
-        return false;
+        await sendWhatsAppMessage(
+          context.userId,
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        );
+        return true;
       }
+
+      console.log('Creating ticket with authenticated user ID:', platformSecret.user_id);
 
       // Create ticket with the exact stored order information
       const ticketResponse = await TicketHandler.createOrderTicket(
-        authenticatedUserId, // Use the properly authenticated user_id
+        platformSecret.user_id,
         context.userName,
         updatedOrderInfo.product,
         updatedOrderInfo.quantity,
@@ -100,6 +112,7 @@ export class OrderProcessor {
         );
         return true;
       } else {
+        console.error('Ticket creation failed:', ticketResponse.error);
         // Send order failure message
         await sendWhatsAppMessage(
           context.userId,
@@ -111,7 +124,13 @@ export class OrderProcessor {
       }
     } catch (parseError) {
       console.error('Error parsing pending order:', parseError);
-      return false;
+      await sendWhatsAppMessage(
+        context.userId,
+        "Order failed. There was an error processing your order. Please try again.",
+        Deno.env.get('WHATSAPP_PHONE_ID')!,
+        Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+      );
+      return true;
     }
   }
 

@@ -51,3 +51,46 @@ export async function getUserContext(phoneNumberId: string): Promise<UserContext
     return null;
   }
 }
+
+/**
+ * Verifies if the incoming message is from a valid WhatsApp account with proper credentials
+ * @param phoneNumberId The phone_number_id from the webhook payload
+ */
+export async function verifyMessageOrigin(phoneNumberId: string): Promise<boolean> {
+  try {
+    if (!phoneNumberId) {
+      console.error('No phone_number_id provided for verification');
+      return false;
+    }
+    
+    const context = await getUserContext(phoneNumberId);
+    return context !== null;
+  } catch (error) {
+    console.error('Error verifying message origin:', error);
+    return false;
+  }
+}
+
+/**
+ * Gets the platform user ID (Supabase auth user_id) associated with the WhatsApp phone ID
+ * @param phoneNumberId WhatsApp phone ID to look up
+ */
+export async function getPlatformUserId(phoneNumberId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('platform_secrets')
+      .select('user_id')
+      .eq('whatsapp_phone_id', phoneNumberId)
+      .maybeSingle();
+      
+    if (error || !data) {
+      console.error('Error getting platform user ID:', error);
+      return null;
+    }
+    
+    return data.user_id;
+  } catch (error) {
+    console.error('Error in getPlatformUserId:', error);
+    return null;
+  }
+}

@@ -44,7 +44,7 @@ export class TicketHandler {
     try {
       console.log(`Creating order ticket for user: ${userId}, product: ${productName}, quantity: ${quantity}`);
       
-      // Create ticket data object
+      // Create ticket data object with proper user_id field
       const ticketData = {
         user_id: userId,
         title: `Order for ${productName}`,
@@ -108,8 +108,6 @@ export class TicketHandler {
           return `How many of the ${orderInfo.product} would you like to order?`;
         }
 
-        // Verify product exists (optional step)
-        
         // Ask for confirmation
         return `You're about to order ${orderInfo.quantity} of ${orderInfo.product}. Please type "Yes", "Ow" or "ඔව්" to confirm your order.`;
       } 
@@ -144,7 +142,7 @@ export class TicketHandler {
       }
       
       const ticketData = {
-        user_id: authenticatedUserId, // Use the properly authenticated user_id
+        user_id: authenticatedUserId,
         title: `Support Request: ${context.messageContent.substring(0, 50)}...`,
         customer_name: context.userName,
         platform: context.platform,

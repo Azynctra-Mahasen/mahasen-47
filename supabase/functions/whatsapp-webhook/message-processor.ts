@@ -36,7 +36,7 @@ export async function processMessage(payload: any, userContext: UserContext) {
       return;
     }
 
-    console.log(`Processing messages for user ${userContext.userId}`);
+    console.log(`Processing messages for user ${userContext.userId} with whatsapp phone id ${userContext.whatsappPhoneId}`);
     
     // Process each message in the payload
     for (const message of messages) {
@@ -145,11 +145,12 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
         const messageHistory = await getConversationHistory(conversationId);
         
         const context = {
-          userId: userContext.userId, // Include user ID in context
+          userId: userContext.userId,
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,
-          messageHistory: messageHistory
+          messageHistory: messageHistory,
+          whatsappPhoneId: userContext.whatsappPhoneId
         };
         
         console.log(`Generating AI response with context for user: ${userContext.userId}`);
