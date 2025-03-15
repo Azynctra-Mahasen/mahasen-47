@@ -149,7 +149,9 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,
-          messageHistory: messageHistory
+          messageHistory: messageHistory,
+          platform: 'whatsapp',
+          messageContent: extractMessageContent(message)
         };
         
         console.log(`Generating AI response with context for user: ${userContext.userId}`);

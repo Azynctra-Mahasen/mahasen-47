@@ -24,3 +24,4 @@ USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own tickets" 
 ON tickets FOR DELETE 
 USING (auth.uid() = user_id);
+

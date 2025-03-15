@@ -54,11 +54,15 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
+      // Get the phone ID from the environment
+      const whatsappPhoneId = Deno.env.get('WHATSAPP_PHONE_ID');
+      console.log('Using WhatsApp phone ID for user lookup:', whatsappPhoneId);
+
       // Get the actual user_id associated with this phone ID for proper isolation
       const { data: platformSecret, error: secretError } = await supabase
         .from('platform_secrets')
         .select('user_id')
-        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
+        .eq('whatsapp_phone_id', whatsappPhoneId)
         .maybeSingle();
 
       if (secretError) {
