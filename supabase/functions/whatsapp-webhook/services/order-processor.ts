@@ -19,194 +19,134 @@ interface OrderContext {
 interface PendingOrder {
   product: string;
   quantity: number;
-  state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING';
+  state: 'CONFIRMING' | 'PROCESSING';
   price?: number;
 }
 
 export class OrderProcessor {
   static async handlePendingOrderConfirmation(context: OrderContext): Promise<boolean> {
+    if (!this.isConfirmationMessage(context.userMessage)) {
+      return false;
+    }
+
+    console.log('Checking for pending order for user:', context.userId);
+
+    // Get the pending order from conversation_contexts
+    const { data: pendingOrder, error } = await supabase
+      .from('conversation_contexts')
+      .select('context')
+      .eq('conversation_id', context.userId)
+      .eq('context_type', 'pending_order')
+      .maybeSingle();
+
+    if (error || !pendingOrder) {
+      console.log('No pending order found:', error);
+      return false;
+    }
+
     try {
-      console.log('Checking if message is a confirmation:', context.userMessage);
-      
-      if (!this.isConfirmationMessage(context.userMessage)) {
-        console.log('Not a confirmation message');
-        return false;
-      }
+      const orderInfo: PendingOrder = JSON.parse(pendingOrder.context);
+      console.log('Found pending order:', orderInfo);
 
-      console.log('Looking for pending order for user:', context.userId);
+      // Update order state to PROCESSING
+      const updatedOrderInfo = {
+        ...orderInfo,
+        state: 'PROCESSING'
+      };
 
-      // Get the pending order from conversation_contexts
-      const { data: pendingOrderData, error: contextError } = await supabase
-        .from('conversation_contexts')
-        .select('context')
-        .eq('conversation_id', context.userId)
-        .eq('context_type', 'pending_order')
+      // Get the actual user_id associated with this phone ID for proper isolation
+      const { data: platformSecret, error: secretError } = await supabase
+        .from('platform_secrets')
+        .select('user_id')
+        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
         .maybeSingle();
 
-      if (contextError) {
-        console.error('Error fetching pending order:', contextError);
+      if (secretError) {
+        console.error('Error fetching user_id from platform_secrets:', secretError);
         return false;
       }
 
-      if (!pendingOrderData || !pendingOrderData.context) {
-        console.log('No pending order found in context');
+      const authenticatedUserId = platformSecret?.user_id;
+      console.log('Authenticated user ID for this platform:', authenticatedUserId);
+
+      if (!authenticatedUserId) {
+        console.error('No user_id found for this WhatsApp phone ID');
         return false;
       }
 
-      console.log('Found pending order context:', pendingOrderData.context);
-      
-      try {
-        const orderInfo: PendingOrder = JSON.parse(pendingOrderData.context);
-        console.log('Parsed pending order:', orderInfo);
+      // Create ticket with the exact stored order information
+      const ticketResponse = await TicketHandler.createOrderTicket(
+        authenticatedUserId, // Use the properly authenticated user_id
+        context.userName,
+        updatedOrderInfo.product,
+        updatedOrderInfo.quantity,
+        context.whatsappMessageId
+      );
 
-        if (orderInfo.state !== 'CONFIRMING') {
-          console.log('Order not in confirming state:', orderInfo.state);
-          return false;
-        }
-
-        // Update order state to PROCESSING
-        orderInfo.state = 'PROCESSING';
-
-        // Get user authentication from platform_secrets
-        const whatsappPhoneId = Deno.env.get('WHATSAPP_PHONE_ID');
-        console.log('Looking up user for WhatsApp phone ID:', whatsappPhoneId);
-
-        const { data: platformSecrets, error: secretsError } = await supabase
-          .from('platform_secrets')
-          .select('user_id')
-          .eq('whatsapp_phone_id', whatsappPhoneId)
-          .maybeSingle();
-
-        if (secretsError || !platformSecrets) {
-          console.error('Error finding user ID from platform_secrets:', secretsError);
-          await this.sendOrderResponse(
-            context.userId, 
-            "Order failed. System could not authenticate your request. Please contact support.",
-            whatsappPhoneId!
-          );
-          return true;
-        }
-
-        const authenticatedUserId = platformSecrets.user_id;
-        console.log('Authenticated user for ticket creation:', authenticatedUserId);
-
-        if (!authenticatedUserId) {
-          console.error('No authenticated user found for this WhatsApp phone ID');
-          await this.sendOrderResponse(
-            context.userId, 
-            "Order failed. User authentication error. Please contact support.",
-            whatsappPhoneId!
-          );
-          return true;
-        }
-
-        // Create ticket with the authenticated user
-        console.log('Creating ticket with user ID:', authenticatedUserId);
-        const ticketResponse = await TicketHandler.createOrderTicket(
-          authenticatedUserId,
-          context.userName,
-          orderInfo.product,
-          orderInfo.quantity,
-          context.whatsappMessageId
-        );
-
-        console.log('Ticket creation response:', ticketResponse);
-
-        // Delete the pending order context after processing
-        const { error: deleteError } = await supabase
+      if (ticketResponse.success) {
+        // Delete the pending order after successful ticket creation
+        await supabase
           .from('conversation_contexts')
           .delete()
           .eq('conversation_id', context.userId)
           .eq('context_type', 'pending_order');
 
-        if (deleteError) {
-          console.error('Error deleting pending order context:', deleteError);
-        }
-
-        // Send appropriate response based on ticket creation result
-        if (ticketResponse.success) {
-          await this.sendOrderResponse(
-            context.userId,
-            `Your Order for ${orderInfo.product} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
-            whatsappPhoneId!
-          );
-        } else {
-          await this.sendOrderResponse(
-            context.userId,
-            "Order failed. Please retry with correct Product & Quantity in a bit.",
-            whatsappPhoneId!
-          );
-        }
-
+        // Send order confirmation message
+        await sendWhatsAppMessage(
+          context.userId,
+          `Your Order for ${updatedOrderInfo.product} for ${updatedOrderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
+          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        );
         return true;
-      } catch (parseError) {
-        console.error('Error parsing pending order JSON:', parseError);
-        return false;
+      } else {
+        // Send order failure message
+        await sendWhatsAppMessage(
+          context.userId,
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          Deno.env.get('WHATSAPP_PHONE_ID')!,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        );
+        return true;
       }
-    } catch (error) {
-      console.error('Unexpected error in handlePendingOrderConfirmation:', error);
+    } catch (parseError) {
+      console.error('Error parsing pending order:', parseError);
       return false;
     }
   }
 
   static async storePendingOrder(userId: string, orderInfo: any): Promise<void> {
-    try {
-      console.log('Storing new pending order for user', userId, ':', orderInfo);
+    console.log('Storing new pending order:', orderInfo);
 
-      // Delete any existing pending orders first
-      await supabase
-        .from('conversation_contexts')
-        .delete()
-        .eq('conversation_id', userId)
-        .eq('context_type', 'pending_order');
+    // Delete any existing pending orders first
+    await supabase
+      .from('conversation_contexts')
+      .delete()
+      .eq('conversation_id', userId)
+      .eq('context_type', 'pending_order');
 
-      // Store the new pending order
-      const { error } = await supabase
-        .from('conversation_contexts')
-        .insert({
-          conversation_id: userId,
-          context_type: 'pending_order',
-          context: JSON.stringify({
-            product: orderInfo.product,
-            quantity: orderInfo.quantity,
-            state: 'CONFIRMING',
-            price: orderInfo.price
-          })
-        });
+    // Store the new pending order
+    const { error } = await supabase
+      .from('conversation_contexts')
+      .insert({
+        conversation_id: userId,
+        context_type: 'pending_order',
+        context: JSON.stringify({
+          product: orderInfo.product,
+          quantity: orderInfo.quantity,
+          state: 'CONFIRMING',
+          price: orderInfo.price
+        })
+      });
 
-      if (error) {
-        console.error('Error storing pending order:', error);
-        throw error;
-      }
-      
-      console.log('Successfully stored pending order for user:', userId);
-    } catch (error) {
-      console.error('Error in storePendingOrder:', error);
+    if (error) {
+      console.error('Error storing pending order:', error);
       throw error;
     }
   }
 
-  private static async sendOrderResponse(
-    userId: string, 
-    message: string, 
-    whatsappPhoneId: string
-  ): Promise<void> {
-    try {
-      await sendWhatsAppMessage(
-        userId,
-        message,
-        whatsappPhoneId,
-        Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
-      );
-      console.log('Sent order response to user:', userId);
-    } catch (error) {
-      console.error('Error sending order response:', error);
-    }
-  }
-
   private static isConfirmationMessage(message: string): boolean {
-    const lowerMessage = message.toLowerCase().trim();
     const confirmationWords = ['yes', 'ow', 'ඔව්'];
-    return confirmationWords.includes(lowerMessage);
+    return confirmationWords.some(word => message.toLowerCase().trim() === word);
   }
 }
