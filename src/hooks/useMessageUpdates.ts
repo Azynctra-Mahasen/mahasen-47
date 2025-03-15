@@ -12,15 +12,21 @@ export const useMessageUpdates = (platform: Platform | undefined) => {
     if (!platform) return;
 
     console.log('Setting up real-time subscription for messages');
+    let channel: any = null;
 
     // Get the current user session
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.log('No active session, skipping real-time subscription');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          console.log('No active session, skipping real-time subscription');
+          return null;
+        }
+        return session.user.id;
+      } catch (error) {
+        console.error('Error getting session:', error);
         return null;
       }
-      return session.user.id;
     };
 
     checkSession().then(userId => {
@@ -33,49 +39,53 @@ export const useMessageUpdates = (platform: Platform | undefined) => {
         supabase.removeChannel(existingChannel);
       }
 
-      const channel = supabase
-        .channel('messages-updates')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'messages',
-            filter: `user_id=eq.${userId}`
-          },
-          (payload) => {
-            console.log('Received real-time update:', payload);
-            
-            // Immediately invalidate and refetch conversations
-            queryClient.invalidateQueries({ 
-              queryKey: ["conversations", platform],
-              exact: true
-            });
+      try {
+        channel = supabase
+          .channel('messages-updates')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'messages',
+              filter: `user_id=eq.${userId}`
+            },
+            (payload) => {
+              console.log('Received real-time update:', payload);
+              
+              // Immediately invalidate and refetch conversations
+              queryClient.invalidateQueries({ 
+                queryKey: ["conversations", platform],
+                exact: true
+              });
 
-            // Show notification for new messages
-            if (payload.eventType === 'INSERT' && payload.new.status === 'received') {
-              toast.success(`New message from ${payload.new.sender_name}`);
+              // Show notification for new messages
+              if (payload.eventType === 'INSERT' && payload.new.status === 'received') {
+                toast.success(`New message from ${payload.new.sender_name}`);
+              }
             }
-          }
-        )
-        .subscribe((status) => {
-          console.log("Subscription status:", status);
-          if (status === 'SUBSCRIBED') {
-            console.log('Successfully subscribed to messages updates');
-          }
-        });
-
-      // Cleanup function
-      return () => {
-        console.log("Cleaning up subscription");
-        if (channel) {
-          supabase.removeChannel(channel);
-        }
-      };
+          )
+          .subscribe((status) => {
+            console.log("Subscription status:", status);
+            if (status === 'SUBSCRIBED') {
+              console.log('Successfully subscribed to messages updates');
+            }
+          });
+      } catch (error) {
+        console.error('Error setting up channel:', error);
+      }
     });
 
+    // Cleanup function
     return () => {
-      console.log("Cleaning up subscription setup");
+      console.log("Cleaning up subscription");
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (err) {
+          console.error("Error removing channel:", err);
+        }
+      }
     };
   }, [platform, queryClient]);
 };

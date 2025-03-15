@@ -53,8 +53,10 @@ const App = () => {
           if (mounted) {
             setIsAuthenticated(false);
             queryClient.clear();
-            // Only show error toast for non-refresh token errors
-            if (error.message !== "Invalid Refresh Token: Refresh Token Not Found") {
+            
+            // Only show error toast for critical errors, not token refresh issues
+            if (error.message !== "Invalid Refresh Token: Refresh Token Not Found" && 
+                !error.message.includes("refresh token")) {
               toast({
                 variant: "destructive",
                 title: "Authentication Error",
@@ -98,9 +100,8 @@ const App = () => {
             setIsAuthenticated(false);
             queryClient.clear();
             toast({
-              variant: "destructive",
-              title: "Session Ended",
-              description: "Please log in again to continue.",
+              title: "Signed Out",
+              description: "You have been signed out successfully.",
             });
             break;
           case 'TOKEN_REFRESHED':
@@ -116,7 +117,10 @@ const App = () => {
             setIsAuthenticated(!!session);
             break;
           default:
-            setIsAuthenticated(!!session);
+            // Don't change auth state for other events unless we have session data
+            if (session !== null) {
+              setIsAuthenticated(!!session);
+            }
             break;
         }
       }

@@ -1,4 +1,3 @@
-
 import { useNavigate } from "react-router-dom";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
@@ -6,27 +5,40 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
     // Check if user is already logged in
     const checkUser = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Session check error:", error);
-        toast({
-          variant: "destructive",
-          title: "Authentication Error",
-          description: "Please try again.",
-        });
-      }
-      if (session) {
-        navigate("/dashboard");
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Session check error:", error);
+          // Only show error for critical auth errors, not token refresh
+          if (!error.message.includes("refresh token")) {
+            toast({
+              variant: "destructive",
+              title: "Authentication Error",
+              description: "Please try again.",
+            });
+          }
+        }
+        
+        if (session) {
+          navigate("/dashboard");
+        }
+        
+        setIsCheckingSession(false);
+      } catch (error) {
+        console.error("Error checking session:", error);
+        setIsCheckingSession(false);
       }
     };
 
@@ -34,13 +46,21 @@ const Login = () => {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
+      if (event === 'SIGNED_IN' && session) {
         navigate("/dashboard");
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate, toast]);
+
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800 px-4">
