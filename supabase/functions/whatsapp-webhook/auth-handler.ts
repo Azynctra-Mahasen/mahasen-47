@@ -1,27 +1,34 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 export interface UserContext {
   userId: string;
   whatsappPhoneId: string;
   whatsappAccessToken: string;
-  whatsappVerifyToken: string | null;
+  whatsappVerifyToken?: string;
 }
 
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 /**
- * Get user context based on phone_number_id from the WhatsApp API payload
- * @param phoneNumberId The phone_number_id value from the WhatsApp API payload
+ * Authenticate the webhook request and return the user context
+ * @param phoneNumberId The WhatsApp phone number ID from the webhook payload
+ * @returns The user context if authentication was successful, or null if not
  */
-export async function getUserContext(phoneNumberId: string): Promise<UserContext | null> {
+export async function authenticateWebhook(phoneNumberId: string): Promise<UserContext | null> {
   try {
-    console.log(`Fetching user context for phone_number_id: ${phoneNumberId}`);
+    console.log('Authenticating webhook request for phone number ID:', phoneNumberId);
     
-    // Fetch platform secrets for the specific whatsapp_phone_id
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase environment variables');
+      return null;
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Find the user associated with this WhatsApp phone ID
     const { data: platformSecret, error } = await supabase
       .from('platform_secrets')
       .select('user_id, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token')
@@ -34,12 +41,13 @@ export async function getUserContext(phoneNumberId: string): Promise<UserContext
     }
     
     if (!platformSecret) {
-      console.error(`No platform secrets found for phone_number_id: ${phoneNumberId}`);
+      console.error('No platform secrets found for phone number ID:', phoneNumberId);
       return null;
     }
     
-    console.log(`Found user context for phone_number_id: ${phoneNumberId}, user_id: ${platformSecret.user_id}`);
+    console.log('User authenticated successfully:', platformSecret.user_id);
     
+    // Return the user context
     return {
       userId: platformSecret.user_id,
       whatsappPhoneId: platformSecret.whatsapp_phone_id,
@@ -47,7 +55,7 @@ export async function getUserContext(phoneNumberId: string): Promise<UserContext
       whatsappVerifyToken: platformSecret.whatsapp_verify_token
     };
   } catch (error) {
-    console.error('Error in getUserContext:', error);
+    console.error('Error authenticating webhook:', error);
     return null;
   }
 }

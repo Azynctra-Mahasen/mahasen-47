@@ -145,7 +145,7 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
         const messageHistory = await getConversationHistory(conversationId);
         
         const context = {
-          userId: userContext.userId, // Include user ID in context
+          userId: userContext.userId,
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,

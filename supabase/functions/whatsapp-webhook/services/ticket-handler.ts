@@ -64,7 +64,7 @@ export class TicketHandler {
       console.log("Inserting ticket with data:", JSON.stringify(ticketData, null, 2));
 
       // Insert ticket into database
-      const { data: ticket, error } = await supabase
+      const { data: newTicket, error } = await supabase
         .from('tickets')
         .insert(ticketData)
         .select()
@@ -78,10 +78,10 @@ export class TicketHandler {
         };
       }
 
-      console.log("Successfully created ticket:", ticket);
+      console.log("Successfully created ticket:", newTicket);
       return { 
         success: true, 
-        ticketId: ticket.id 
+        ticketId: newTicket.id 
       };
     } catch (error) {
       console.error("Error creating order ticket:", error);
