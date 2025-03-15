@@ -42,6 +42,8 @@ export class TicketHandler {
     whatsappMessageId: string
   ): Promise<{ success: boolean; ticketId?: number; error?: string }> {
     try {
+      console.log(`Creating order ticket for user: ${userId}, product: ${productName}, quantity: ${quantity}`);
+      
       // Create ticket data object
       const ticketData = {
         user_id: userId,
@@ -59,6 +61,8 @@ export class TicketHandler {
         }
       };
 
+      console.log("Inserting ticket with data:", JSON.stringify(ticketData, null, 2));
+
       // Insert ticket into database
       const { data: ticket, error } = await supabase
         .from('tickets')
@@ -74,6 +78,7 @@ export class TicketHandler {
         };
       }
 
+      console.log("Successfully created ticket:", ticket);
       return { 
         success: true, 
         ticketId: ticket.id 
@@ -118,8 +123,28 @@ export class TicketHandler {
 
   private static async createEscalationTicket(parsedResponse: any, context: any): Promise<string | null> {
     try {
+      // Get the actual user_id associated with this phone ID for proper isolation
+      const { data: platformSecret, error: secretError } = await supabase
+        .from('platform_secrets')
+        .select('user_id')
+        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
+        .maybeSingle();
+
+      if (secretError) {
+        console.error('Error fetching user_id from platform_secrets:', secretError);
+        return null;
+      }
+
+      const authenticatedUserId = platformSecret?.user_id;
+      console.log('Authenticated user ID for this platform:', authenticatedUserId);
+
+      if (!authenticatedUserId) {
+        console.error('No user_id found for this WhatsApp phone ID');
+        return null;
+      }
+      
       const ticketData = {
-        user_id: context.userId,
+        user_id: authenticatedUserId, // Use the properly authenticated user_id
         title: `Support Request: ${context.messageContent.substring(0, 50)}...`,
         customer_name: context.userName,
         platform: context.platform,

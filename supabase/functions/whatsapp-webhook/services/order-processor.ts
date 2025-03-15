@@ -54,9 +54,29 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
+      // Get the actual user_id associated with this phone ID for proper isolation
+      const { data: platformSecret, error: secretError } = await supabase
+        .from('platform_secrets')
+        .select('user_id')
+        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
+        .maybeSingle();
+
+      if (secretError) {
+        console.error('Error fetching user_id from platform_secrets:', secretError);
+        return false;
+      }
+
+      const authenticatedUserId = platformSecret?.user_id;
+      console.log('Authenticated user ID for this platform:', authenticatedUserId);
+
+      if (!authenticatedUserId) {
+        console.error('No user_id found for this WhatsApp phone ID');
+        return false;
+      }
+
       // Create ticket with the exact stored order information
       const ticketResponse = await TicketHandler.createOrderTicket(
-        context.userId,
+        authenticatedUserId, // Use the properly authenticated user_id
         context.userName,
         updatedOrderInfo.product,
         updatedOrderInfo.quantity,
