@@ -54,64 +54,93 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
-      // Get the actual user_id associated with this phone ID for proper isolation
+      // Create ticket with the exact stored order information
+      // Using the user's actual ID from platform_secrets for proper isolation
       const { data: platformSecret, error: secretError } = await supabase
         .from('platform_secrets')
         .select('user_id')
-        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
+        .eq('whatsapp_phone_id', context.whatsappMessageId.split('_')[0])
         .maybeSingle();
 
       if (secretError) {
         console.error('Error fetching user_id from platform_secrets:', secretError);
-        return false;
+        // Fall back to using the conversation user ID if we can't get the platform user ID
+        const ticketResponse = await TicketHandler.createOrderTicket(
+          context.userId,
+          context.userName,
+          updatedOrderInfo.product,
+          updatedOrderInfo.quantity,
+          context.whatsappMessageId
+        );
+
+        await this.handleTicketResponse(ticketResponse, updatedOrderInfo, context);
+        return true;
       }
 
-      const authenticatedUserId = platformSecret?.user_id;
+      // If we found a platform secret, use that user_id
+      const authenticatedUserId = platformSecret?.user_id || context.userId;
       console.log('Authenticated user ID for this platform:', authenticatedUserId);
 
-      if (!authenticatedUserId) {
-        console.error('No user_id found for this WhatsApp phone ID');
-        return false;
-      }
-
-      // Create ticket with the exact stored order information
+      // Create ticket with proper user ID
       const ticketResponse = await TicketHandler.createOrderTicket(
-        authenticatedUserId, // Use the properly authenticated user_id
+        authenticatedUserId,
         context.userName,
         updatedOrderInfo.product,
         updatedOrderInfo.quantity,
         context.whatsappMessageId
       );
 
-      if (ticketResponse.success) {
-        // Delete the pending order after successful ticket creation
-        await supabase
-          .from('conversation_contexts')
-          .delete()
-          .eq('conversation_id', context.userId)
-          .eq('context_type', 'pending_order');
-
-        // Send order confirmation message
-        await sendWhatsAppMessage(
-          context.userId,
-          `Your Order for ${updatedOrderInfo.product} for ${updatedOrderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
-          Deno.env.get('WHATSAPP_PHONE_ID')!,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
-        );
-        return true;
-      } else {
-        // Send order failure message
-        await sendWhatsAppMessage(
-          context.userId,
-          "Order failed. Please retry with correct Product & Quantity in a bit.",
-          Deno.env.get('WHATSAPP_PHONE_ID')!,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
-        );
-        return true;
-      }
+      await this.handleTicketResponse(ticketResponse, updatedOrderInfo, context);
+      return true;
     } catch (parseError) {
       console.error('Error parsing pending order:', parseError);
       return false;
+    }
+  }
+
+  private static async handleTicketResponse(
+    ticketResponse: { success: boolean; ticketId?: number; error?: string },
+    orderInfo: PendingOrder,
+    context: OrderContext
+  ): Promise<void> {
+    // Delete the pending order regardless of success or failure
+    await supabase
+      .from('conversation_contexts')
+      .delete()
+      .eq('conversation_id', context.userId)
+      .eq('context_type', 'pending_order');
+
+    // Get the actual WhatsApp phone ID and access token to send response message
+    const { data: platformSecrets, error: secretsError } = await supabase
+      .from('platform_secrets')
+      .select('whatsapp_phone_id, whatsapp_access_token')
+      .eq('user_id', context.userId)
+      .maybeSingle();
+
+    if (secretsError) {
+      console.error('Error getting platform secrets:', secretsError);
+      return;
+    }
+
+    const phoneId = platformSecrets?.whatsapp_phone_id || Deno.env.get('WHATSAPP_PHONE_ID')!;
+    const accessToken = platformSecrets?.whatsapp_access_token || Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+
+    if (ticketResponse.success) {
+      // Send order confirmation message
+      await sendWhatsAppMessage(
+        context.userId,
+        `Your Order for ${orderInfo.product} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
+        phoneId,
+        accessToken
+      );
+    } else {
+      // Send order failure message
+      await sendWhatsAppMessage(
+        context.userId,
+        "Order failed. Please retry with correct Product & Quantity in a bit.",
+        phoneId,
+        accessToken
+      );
     }
   }
 

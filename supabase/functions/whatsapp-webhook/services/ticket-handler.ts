@@ -2,9 +2,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getExactProduct } from "./knowledge-base.ts";
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+);
 
 export class TicketHandler {
   static async handleTicketCreation(parsedResponse: any, context: any): Promise<string | null> {
@@ -71,7 +72,7 @@ export class TicketHandler {
         .single();
 
       if (error) {
-        console.error("Error creating order ticket:", error);
+        console.error("Error creating ticket:", error);
         return { 
           success: false, 
           error: error.message 
@@ -108,8 +109,6 @@ export class TicketHandler {
           return `How many of the ${orderInfo.product} would you like to order?`;
         }
 
-        // Verify product exists (optional step)
-        
         // Ask for confirmation
         return `You're about to order ${orderInfo.quantity} of ${orderInfo.product}. Please type "Yes", "Ow" or "ඔව්" to confirm your order.`;
       } 
@@ -123,28 +122,15 @@ export class TicketHandler {
 
   private static async createEscalationTicket(parsedResponse: any, context: any): Promise<string | null> {
     try {
-      // Get the actual user_id associated with this phone ID for proper isolation
-      const { data: platformSecret, error: secretError } = await supabase
-        .from('platform_secrets')
-        .select('user_id')
-        .eq('whatsapp_phone_id', Deno.env.get('WHATSAPP_PHONE_ID'))
-        .maybeSingle();
-
-      if (secretError) {
-        console.error('Error fetching user_id from platform_secrets:', secretError);
-        return null;
-      }
-
-      const authenticatedUserId = platformSecret?.user_id;
-      console.log('Authenticated user ID for this platform:', authenticatedUserId);
-
-      if (!authenticatedUserId) {
-        console.error('No user_id found for this WhatsApp phone ID');
+      // Get the user_id from context (already authenticated)
+      const userId = context.userId;
+      if (!userId) {
+        console.error('No user_id found for this request');
         return null;
       }
       
       const ticketData = {
-        user_id: authenticatedUserId, // Use the properly authenticated user_id
+        user_id: userId,
         title: `Support Request: ${context.messageContent.substring(0, 50)}...`,
         customer_name: context.userName,
         platform: context.platform,
@@ -153,7 +139,7 @@ export class TicketHandler {
         priority: this.getPriorityFromResponse(parsedResponse),
         body: context.messageContent,
         conversation_id: context.conversationId,
-        whatsapp_message_id: context.messageId,
+        whatsapp_message_id: context.whatsappMessageId,
         escalation_reason: parsedResponse.escalation_reason || 'Requires human assistance',
         intent_type: parsedResponse.intent
       };
