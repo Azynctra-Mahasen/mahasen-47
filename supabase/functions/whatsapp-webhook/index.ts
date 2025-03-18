@@ -1,6 +1,6 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { getUserContext } from './auth-handler.ts';
+import { authenticateUser } from './auth-handler.ts';
 import { processMessage } from './message-processor.ts';
 
 // Define CORS headers for responses
@@ -69,7 +69,7 @@ serve(async (req) => {
           console.log(`Processing message for phone_number_id: ${phoneNumberId}`);
           
           // Get user context based on phone_number_id
-          const userContext = await getUserContext(phoneNumberId);
+          const userContext = await authenticateUser(phoneNumberId);
           
           if (!userContext) {
             console.error(`No user context found for phone_number_id: ${phoneNumberId}`);

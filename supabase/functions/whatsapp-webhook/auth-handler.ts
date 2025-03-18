@@ -15,7 +15,7 @@ export interface UserContext {
  * Authenticate user based on WhatsApp phone ID
  * @param phoneNumberId The WhatsApp phone ID from the webhook payload
  */
-export async function authenticateUser(phoneNumberId: string): Promise<UserContext> {
+export async function authenticateUser(phoneNumberId: string): Promise<UserContext | null> {
   try {
     console.log('Authenticating user for WhatsApp phone ID:', phoneNumberId);
 
@@ -33,7 +33,25 @@ export async function authenticateUser(phoneNumberId: string): Promise<UserConte
 
     if (!platformSecret) {
       console.error('No platform secret found for phone ID:', phoneNumberId);
-      throw new Error(`No platform secret found for phone ID: ${phoneNumberId}`);
+      
+      // Fallback to environment variables
+      const fallbackUserId = Deno.env.get('FALLBACK_USER_ID') || '';
+      const fallbackAccessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN') || '';
+      
+      console.log('Using fallback authentication:', { 
+        phoneNumberId,
+        fallbackUserId: fallbackUserId ? 'Set' : 'Not set'
+      });
+      
+      if (fallbackUserId) {
+        return {
+          userId: fallbackUserId,
+          whatsappPhoneId: phoneNumberId,
+          whatsappAccessToken: fallbackAccessToken
+        };
+      }
+      
+      return null;
     }
 
     console.log('Found user for WhatsApp phone ID:', platformSecret.user_id);
@@ -45,20 +63,6 @@ export async function authenticateUser(phoneNumberId: string): Promise<UserConte
     };
   } catch (error) {
     console.error('Authentication error:', error);
-    
-    // Fallback to environment variables
-    const fallbackUserId = Deno.env.get('FALLBACK_USER_ID') || '';
-    const fallbackAccessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN') || '';
-    
-    console.log('Using fallback authentication:', { 
-      phoneNumberId,
-      fallbackUserId: fallbackUserId ? 'Set' : 'Not set'
-    });
-    
-    return {
-      userId: fallbackUserId,
-      whatsappPhoneId: phoneNumberId,
-      whatsappAccessToken: fallbackAccessToken
-    };
+    return null;
   }
 }
