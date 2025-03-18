@@ -36,7 +36,7 @@ export async function processMessage(payload: any, userContext: UserContext) {
       return;
     }
 
-    console.log(`Processing messages for user ${userContext.userId} with whatsapp phone id ${userContext.whatsappPhoneId}`);
+    console.log(`Processing messages for user ${userContext.userId}`);
     
     // Process each message in the payload
     for (const message of messages) {
@@ -109,33 +109,10 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
     
     console.log(`Saved incoming message: ${savedMessage.id} for user: ${userContext.userId}`);
 
-    // Store message metadata including phone_number_id
-    try {
-      const metadataPayload = {
-        message_id: savedMessage.id,
-        metadata: {
-          phone_number_id: userContext.whatsappPhoneId,
-          message_type: message.type
-        }
-      };
-      
-      const { error: metadataError } = await supabase
-        .from('message_metadata')
-        .insert(metadataPayload);
-        
-      if (metadataError) {
-        console.error('Error saving message metadata:', metadataError);
-      } else {
-        console.log('Successfully saved message metadata with phone_number_id:', userContext.whatsappPhoneId);
-      }
-    } catch (metadataError) {
-      console.error('Error saving message metadata:', metadataError);
-    }
-
-    // Check if this is an order confirmation message - This is handled directly without LLM
+    // Check if this is an order confirmation message
     const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
       messageId: savedMessage.id,
-      userId: contactNumber, // This is actually the conversation identifier
+      userId: userContext.userId,
       userName: contactName,
       whatsappMessageId: message.id,
       userMessage: extractMessageContent(message)
@@ -168,14 +145,11 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
         const messageHistory = await getConversationHistory(conversationId);
         
         const context = {
-          userId: userContext.userId,
+          userId: userContext.userId, // Include user ID in context
           messageId: savedMessage.id,
           conversationId: conversationId,
           userName: contactName,
-          messageContent: extractMessageContent(message),
-          messageHistory: messageHistory,
-          whatsappPhoneId: userContext.whatsappPhoneId,
-          platform: 'whatsapp'
+          messageHistory: messageHistory
         };
         
         console.log(`Generating AI response with context for user: ${userContext.userId}`);
