@@ -1,0 +1,351 @@
+
+# Analysis of Intent Detection and Order Management Systems
+
+## Overview
+
+This document analyzes how intent detection works in the application, with a specific focus on order management and the processing of order confirmations when a user says "Yes".
+
+## Message Flow
+
+When a message arrives at the webhook:
+
+1. The webhook entry point (`supabase/functions/whatsapp-webhook/index.ts`) receives incoming messages
+2. It authenticates the user based on the WhatsApp phone ID through `auth-handler.ts`
+3. Authenticated messages are passed to `message-processor.ts` for processing
+4. The message processor first checks if the message is an order confirmation
+5. If not an order confirmation, it generates an AI response which may start an order flow
+6. The AI response either directly handles the order or creates a ticket
+
+## Intent Detection
+
+### Primary Components:
+
+#### 1. Intent Detection in AI Response Generation
+
+In `ollama.ts`, the application first analyzes incoming messages to determine user intent:
+
+```typescript
+export async function generateAIResponse(message: string, context: any, aiSettings: any): Promise<string> {
+  // ... embedding generation and knowledge base search
+  
+  // Call different models based on AI settings
+  if (aiSettings.model_name === 'llama-3.3-70b-versatile') {
+    return await generateGroqResponse(message, updatedContext, aiSettings);
+  } else if (aiSettings.model_name === 'gemini-2.0-flash-exp') {
+    return await generateGeminiResponse(message, updatedContext, aiSettings);
+  } else if (aiSettings.model_name === 'deepseek-r1-distill-llama-70b') {
+    return await generateGroqResponse(message, updatedContext, aiSettings);
+  }
+}
+```
+
+The model handlers (GroqHandler, GeminiHandler) analyze the message and generate a structured response that includes intent analysis:
+
+```typescript
+// From intent.ts - Structure of intent analysis
+export interface IntentAnalysis {
+  intent: 'HUMAN_AGENT_REQUEST' | 'SUPPORT_REQUEST' | 'ORDER_PLACEMENT' | 'GENERAL_QUERY';
+  confidence: number;
+  requires_escalation: boolean;
+  escalation_reason: string | null;
+  detected_entities: {
+    product_mentions: string[];
+    issue_type: string | null;
+    urgency_level: 'high' | 'medium' | 'low';
+    order_info?: {
+      product: string | null;
+      quantity: number;
+      state: 'COLLECTING_INFO' | 'CONFIRMING' | 'PROCESSING' | 'COMPLETED';
+      confirmed: boolean;
+    };
+  };
+  response: string;
+}
+```
+
+#### 2. Client-Side Intent Analysis
+
+The application also has client-side intent analysis through the `IntentDetectionService` in `src/services/intent/intentDetectionService.ts`. This service:
+
+- Analyzes message content to detect specific intents
+- Uses keyword matching and context analysis
+- Determines urgency levels and issue types
+- Decides if a ticket should be created
+
+```typescript
+static analyzeIntent(
+  message: string,
+  knowledgeBaseContext: string | null = null,
+  previousMessages: string[] = []
+): IntentAnalysis {
+  const lowerMessage = message.toLowerCase();
+  
+  // Human agent request detection
+  const hasHumanAgentRequest = HUMAN_AGENT_KEYWORDS.some(keyword => {
+    const keywordLower = keyword.toLowerCase();
+    return lowerMessage.includes(keywordLower) || 
+           this.calculateSimilarity(lowerMessage, keywordLower) > 0.8;
+  });
+
+  // Intent determination and confidence calculation
+  // ...
+  
+  return {
+    intent: primaryIntent,
+    confidence: highestConfidence,
+    requires_escalation,
+    escalation_reason,
+    detected_entities: {
+      product_mentions: [],
+      issue_type: ContextAnalyzer.detectIssueType(message),
+      urgency_level: urgencyLevel
+    }
+  };
+}
+```
+
+## Order Management
+
+The order management flow consists of several key components:
+
+### 1. Initial Order Intent Detection
+
+When a user sends a message asking about products or ordering, the AI detects an `ORDER_PLACEMENT` intent. The AI response includes:
+
+```typescript
+// Example of order intent in response
+{
+  intent: 'ORDER_PLACEMENT',
+  confidence: 0.9,
+  requires_escalation: false,
+  detected_entities: {
+    order_info: {
+      product: "Product Name",
+      quantity: 2,
+      state: 'COLLECTING_INFO'
+    }
+  },
+  response: "What product would you like to order?"
+}
+```
+
+The AI might prompt for product name or quantity if missing. Once both are available, it asks for confirmation.
+
+### 2. Order Confirmation Process
+
+The key component for confirmation handling is the `OrderProcessor` class in `services/order-processor.ts`. The process:
+
+#### a. Confirmation Check
+
+When any new message arrives, before AI processing, the system checks if it's an order confirmation:
+
+```typescript
+// In message-processor.ts
+const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
+  messageId: savedMessage.id,
+  userId: contactNumber, // This is actually the conversation identifier
+  userName: contactName,
+  whatsappMessageId: message.id,
+  userMessage: extractMessageContent(message)
+});
+
+// If the message was handled as an order confirmation, don't process it further
+if (isOrderConfirmation) {
+  console.log('Message handled as order confirmation, skipping AI processing');
+  return;
+}
+```
+
+#### b. Confirmation Validation in OrderProcessor
+
+The `OrderProcessor` checks if the message is a confirmation through the `isConfirmationMessage` method:
+
+```typescript
+private static isConfirmationMessage(message: string): boolean {
+  const confirmationWords = ['yes', 'ow', 'ඔව්'];
+  const normalizedMessage = message.toLowerCase().trim();
+  const isConfirmation = confirmationWords.some(word => normalizedMessage === word);
+  console.log(`Message "${message}" is confirmation: ${isConfirmation}`);
+  return isConfirmation;
+}
+```
+
+It also retrieves any pending order from the database:
+
+```typescript
+// Get the pending order from conversation_contexts
+const { data: pendingOrder, error } = await supabase
+  .from('conversation_contexts')
+  .select('context')
+  .eq('conversation_id', context.userId)
+  .eq('context_type', 'pending_order')
+  .maybeSingle();
+```
+
+#### c. Order Processing After Confirmation
+
+Once confirmed:
+
+1. The order state is updated to 'PROCESSING'
+2. The system retrieves the `phone_number_id` and user context from metadata/platform_secrets
+3. A ticket is created through TicketHandler:
+
+```typescript
+// Create ticket with the exact stored order information
+const ticketResponse = await TicketHandler.createOrderTicket(
+  platformSecret.user_id,
+  context.userName,
+  updatedOrderInfo.product,
+  updatedOrderInfo.quantity,
+  context.whatsappMessageId
+);
+```
+
+4. Based on the ticket creation result, it sends a confirmation or error message:
+
+```typescript
+if (ticketResponse.success) {
+  // Delete the pending order after successful ticket creation
+  await supabase
+    .from('conversation_contexts')
+    .delete()
+    .eq('conversation_id', context.userId)
+    .eq('context_type', 'pending_order');
+
+  // Send order confirmation message
+  await sendWhatsAppMessage(
+    context.userId,
+    `Your Order for ${updatedOrderInfo.product} for ${updatedOrderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
+    platformSecret.whatsapp_phone_id,
+    platformSecret.whatsapp_access_token
+  );
+  return true;
+} else {
+  // Send order failure message
+  await sendWhatsAppMessage(
+    context.userId,
+    "Order failed. Please retry with correct Product & Quantity in a bit.",
+    platformSecret.whatsapp_phone_id,
+    platformSecret.whatsapp_access_token
+  );
+}
+```
+
+### 3. Ticket Creation
+
+The `TicketHandler.createOrderTicket` method creates a ticket with the order details:
+
+```typescript
+static async createOrderTicket(
+  userId: string,
+  customerName: string,
+  productName: string,
+  quantity: number,
+  whatsappMessageId: string
+): Promise<{ success: boolean; ticketId?: number; error?: string }> {
+  // Create ticket data object with proper user_id field
+  const ticketData = {
+    user_id: userId,
+    title: `Order for ${productName}`,
+    customer_name: customerName,
+    platform: 'whatsapp',
+    type: 'Order',
+    status: 'New',
+    priority: 'HIGH',
+    body: `Product Name: ${productName}\nQuantity: ${quantity}`,
+    whatsapp_message_id: whatsappMessageId,
+    product_info: {
+      product_name: productName,
+      quantity: quantity
+    }
+  };
+
+  // Insert ticket into database
+  const { data: ticket, error } = await supabase
+    .from('tickets')
+    .insert(ticketData)
+    .select()
+    .single();
+}
+```
+
+## Storage of Pending Orders
+
+When an order intent is detected but not yet confirmed, the `OrderProcessor` stores it in the database:
+
+```typescript
+static async storePendingOrder(userId: string, orderInfo: any): Promise<void> {
+  // Delete any existing pending orders first
+  await supabase
+    .from('conversation_contexts')
+    .delete()
+    .eq('conversation_id', userId)
+    .eq('context_type', 'pending_order');
+
+  // Store the new pending order
+  const { error } = await supabase
+    .from('conversation_contexts')
+    .insert({
+      conversation_id: userId,
+      context_type: 'pending_order',
+      context: JSON.stringify({
+        product: orderInfo.product,
+        quantity: orderInfo.quantity,
+        state: 'CONFIRMING',
+        price: orderInfo.price
+      })
+    });
+}
+```
+
+## Full Confirmation Flow Sequence
+
+When a user says "Yes" to confirm an order:
+
+1. Message arrives at webhook and is processed through `message-processor.ts`
+2. Before AI processing, `OrderProcessor.handlePendingOrderConfirmation` checks if the message matches confirmation keywords
+3. If it's a confirmation, the system retrieves the pending order from the database
+4. The order state is updated to 'PROCESSING'
+5. The user context (platform secrets, phone ID) is retrieved
+6. TicketHandler creates a ticket with order details
+7. The pending order is deleted from the database
+8. A confirmation message with order number is sent to the user
+9. The message is marked as handled, preventing further AI processing
+
+## Potential Issues
+
+After thorough analysis, I've identified several potential issues:
+
+1. **User Authentication in Webhook**: 
+   - In `auth-handler.ts`, there's a fallback mechanism that uses environment variables if no platform secret is found. This could lead to incorrect user assignment in multi-tenant environments.
+
+2. **WhatsApp Phone ID in OrderProcessor**: 
+   - When retrieving phone_number_id from metadata fails, it falls back to an environment variable which might not match the correct user's phone ID.
+
+3. **Race Condition in Order Confirmation**: 
+   - If multiple messages arrive in quick succession, there could be race conditions in the order confirmation process.
+
+4. **Error Handling in Ticket Creation**: 
+   - While errors are logged, there's limited retry logic for failed ticket creation.
+
+5. **Multi-Platform Isolation**: 
+   - The system attempts to isolate users by phone_number_id, but there are fallbacks to environment variables that could break isolation in error scenarios.
+
+6. **Order State Management**: 
+   - If a user creates an order but never confirms, the pending order remains in the database. There appears to be no cleanup mechanism for abandoned orders.
+
+7. **User Context in Message Processing**: 
+   - The user context is passed through several functions, but there are places where it might not be fully validated, potentially leading to errors.
+
+8. **Ticket Schema Validation**: 
+   - When creating tickets, there doesn't appear to be strong validation of the ticket schema before insertion.
+
+## Recommendations
+
+1. Improve error handling in the order confirmation flow
+2. Add timeout/cleanup mechanism for pending orders
+3. Strengthen user context validation throughout the system
+4. Remove fallbacks to environment variables that could break user isolation
+5. Add retry logic for critical operations like ticket creation
+6. Implement better validation for order data before processing
+7. Consider adding transaction support for the order confirmation process
