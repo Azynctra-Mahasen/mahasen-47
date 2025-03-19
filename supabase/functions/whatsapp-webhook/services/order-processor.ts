@@ -2,11 +2,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { TicketHandler } from './ticket-handler.ts';
 import { sendWhatsAppMessage } from '../whatsapp.ts';
+import { UserContext } from '../auth-handler.ts';
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-);
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 interface OrderContext {
   messageId: string;
@@ -29,7 +29,8 @@ export class OrderProcessor {
       return false;
     }
 
-    console.log('Checking for pending order for user:', context.userId);
+    console.log('Confirmation message detected:', context.userMessage);
+    console.log('Checking for pending order for conversation:', context.userId);
 
     // Get the pending order from conversation_contexts
     const { data: pendingOrder, error } = await supabase
@@ -54,98 +55,121 @@ export class OrderProcessor {
         state: 'PROCESSING'
       };
 
-      // Create ticket with the exact stored order information
-      // Using the user's actual ID from platform_secrets for proper isolation
+      // Extract the phone_number_id from the metadata
+      let phoneNumberId = '';
+      try {
+        const { data: messageMeta } = await supabase
+          .from('message_metadata')
+          .select('metadata')
+          .eq('message_id', context.messageId)
+          .maybeSingle();
+            
+        if (messageMeta?.metadata && typeof messageMeta.metadata === 'object') {
+          phoneNumberId = messageMeta.metadata.phone_number_id || '';
+          console.log('Retrieved phone_number_id from metadata:', phoneNumberId);
+        }
+      } catch (e) {
+        console.error('Error getting message metadata:', e);
+      }
+
+      // If we couldn't get the phone_number_id from the message, use the environment variable
+      if (!phoneNumberId) {
+        phoneNumberId = Deno.env.get('WHATSAPP_PHONE_ID') || '';
+        console.log('Using default WHATSAPP_PHONE_ID:', phoneNumberId);
+      }
+
+      // Get the authenticated user context based on the WhatsApp Phone ID
       const { data: platformSecret, error: secretError } = await supabase
         .from('platform_secrets')
-        .select('user_id')
-        .eq('whatsapp_phone_id', context.whatsappMessageId.split('_')[0])
+        .select('user_id, whatsapp_phone_id, whatsapp_access_token')
+        .eq('whatsapp_phone_id', phoneNumberId)
         .maybeSingle();
 
       if (secretError) {
         console.error('Error fetching user_id from platform_secrets:', secretError);
-        // Fall back to using the conversation user ID if we can't get the platform user ID
-        const ticketResponse = await TicketHandler.createOrderTicket(
+        await sendWhatsAppMessage(
           context.userId,
-          context.userName,
-          updatedOrderInfo.product,
-          updatedOrderInfo.quantity,
-          context.whatsappMessageId
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          phoneNumberId,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
         );
-
-        await this.handleTicketResponse(ticketResponse, updatedOrderInfo, context);
         return true;
       }
 
-      // If we found a platform secret, use that user_id
-      const authenticatedUserId = platformSecret?.user_id || context.userId;
-      console.log('Authenticated user ID for this platform:', authenticatedUserId);
+      if (!platformSecret?.user_id) {
+        console.error('No user_id found for this WhatsApp phone ID:', phoneNumberId);
+        await sendWhatsAppMessage(
+          context.userId,
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          phoneNumberId,
+          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        );
+        return true;
+      }
 
-      // Create ticket with proper user ID
+      console.log('Authenticated user ID for ticket creation:', platformSecret.user_id);
+
+      // Update conversation_contexts with the updated order info
+      await supabase
+        .from('conversation_contexts')
+        .update({
+          context: JSON.stringify(updatedOrderInfo)
+        })
+        .eq('conversation_id', context.userId)
+        .eq('context_type', 'pending_order');
+
+      // Create ticket with the exact stored order information
       const ticketResponse = await TicketHandler.createOrderTicket(
-        authenticatedUserId,
+        platformSecret.user_id,
         context.userName,
         updatedOrderInfo.product,
         updatedOrderInfo.quantity,
         context.whatsappMessageId
       );
 
-      await this.handleTicketResponse(ticketResponse, updatedOrderInfo, context);
-      return true;
+      console.log('Ticket creation response:', ticketResponse);
+
+      if (ticketResponse.success) {
+        // Delete the pending order after successful ticket creation
+        await supabase
+          .from('conversation_contexts')
+          .delete()
+          .eq('conversation_id', context.userId)
+          .eq('context_type', 'pending_order');
+
+        // Send order confirmation message
+        await sendWhatsAppMessage(
+          context.userId,
+          `Your Order for ${updatedOrderInfo.product} for ${updatedOrderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
+          platformSecret.whatsapp_phone_id,
+          platformSecret.whatsapp_access_token
+        );
+        return true;
+      } else {
+        console.error('Ticket creation failed:', ticketResponse.error);
+        // Send order failure message
+        await sendWhatsAppMessage(
+          context.userId,
+          "Order failed. Please retry with correct Product & Quantity in a bit.",
+          platformSecret.whatsapp_phone_id,
+          platformSecret.whatsapp_access_token
+        );
+        return true;
+      }
     } catch (parseError) {
       console.error('Error parsing pending order:', parseError);
-      return false;
-    }
-  }
-
-  private static async handleTicketResponse(
-    ticketResponse: { success: boolean; ticketId?: number; error?: string },
-    orderInfo: PendingOrder,
-    context: OrderContext
-  ): Promise<void> {
-    // Delete the pending order regardless of success or failure
-    await supabase
-      .from('conversation_contexts')
-      .delete()
-      .eq('conversation_id', context.userId)
-      .eq('context_type', 'pending_order');
-
-    // Get the actual WhatsApp phone ID and access token to send response message
-    const { data: platformSecrets, error: secretsError } = await supabase
-      .from('platform_secrets')
-      .select('whatsapp_phone_id, whatsapp_access_token')
-      .eq('user_id', context.userId)
-      .maybeSingle();
-
-    if (secretsError) {
-      console.error('Error getting platform secrets:', secretsError);
-      return;
-    }
-
-    const phoneId = platformSecrets?.whatsapp_phone_id || Deno.env.get('WHATSAPP_PHONE_ID')!;
-    const accessToken = platformSecrets?.whatsapp_access_token || Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
-
-    if (ticketResponse.success) {
-      // Send order confirmation message
       await sendWhatsAppMessage(
         context.userId,
-        `Your Order for ${orderInfo.product} for ${orderInfo.quantity} is placed successfully. Order Number is ${ticketResponse.ticketId}.`,
-        phoneId,
-        accessToken
+        "Order failed. There was an error processing your order. Please try again.",
+        Deno.env.get('WHATSAPP_PHONE_ID')!,
+        Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
       );
-    } else {
-      // Send order failure message
-      await sendWhatsAppMessage(
-        context.userId,
-        "Order failed. Please retry with correct Product & Quantity in a bit.",
-        phoneId,
-        accessToken
-      );
+      return true;
     }
   }
 
   static async storePendingOrder(userId: string, orderInfo: any): Promise<void> {
-    console.log('Storing new pending order:', orderInfo);
+    console.log('Storing new pending order for conversation:', userId, orderInfo);
 
     // Delete any existing pending orders first
     await supabase
@@ -172,10 +196,15 @@ export class OrderProcessor {
       console.error('Error storing pending order:', error);
       throw error;
     }
+    
+    console.log('Successfully stored pending order for conversation:', userId);
   }
 
   private static isConfirmationMessage(message: string): boolean {
     const confirmationWords = ['yes', 'ow', 'ඔව්'];
-    return confirmationWords.some(word => message.toLowerCase().trim() === word);
+    const normalizedMessage = message.toLowerCase().trim();
+    const isConfirmation = confirmationWords.some(word => normalizedMessage === word);
+    console.log(`Message "${message}" is confirmation: ${isConfirmation}`);
+    return isConfirmation;
   }
 }

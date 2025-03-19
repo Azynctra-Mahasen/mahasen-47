@@ -2,10 +2,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getExactProduct } from "./knowledge-base.ts";
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-);
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export class TicketHandler {
   static async handleTicketCreation(parsedResponse: any, context: any): Promise<string | null> {
@@ -45,7 +44,17 @@ export class TicketHandler {
     try {
       console.log(`Creating order ticket for user: ${userId}, product: ${productName}, quantity: ${quantity}`);
       
-      // Create ticket data object
+      if (!userId) {
+        console.error("Missing userId when creating order ticket");
+        return { success: false, error: "Missing required user ID" };
+      }
+      
+      if (!productName || !quantity) {
+        console.error("Missing product or quantity when creating order ticket");
+        return { success: false, error: "Missing product or quantity information" };
+      }
+      
+      // Create ticket data object with proper user_id field
       const ticketData = {
         user_id: userId,
         title: `Order for ${productName}`,
@@ -72,7 +81,7 @@ export class TicketHandler {
         .single();
 
       if (error) {
-        console.error("Error creating ticket:", error);
+        console.error("Error creating order ticket:", error);
         return { 
           success: false, 
           error: error.message 
@@ -122,15 +131,51 @@ export class TicketHandler {
 
   private static async createEscalationTicket(parsedResponse: any, context: any): Promise<string | null> {
     try {
-      // Get the user_id from context (already authenticated)
-      const userId = context.userId;
-      if (!userId) {
-        console.error('No user_id found for this request');
+      // Get the phone_number_id from the message metadata
+      let phoneNumberId = '';
+      try {
+        // Try to get the metadata from the message
+        const { data: messageMeta } = await supabase
+          .from('message_metadata')
+          .select('metadata')
+          .eq('message_id', context.messageId)
+          .maybeSingle();
+          
+        if (messageMeta?.metadata && typeof messageMeta.metadata === 'object') {
+          phoneNumberId = messageMeta.metadata.phone_number_id || '';
+        }
+      } catch (e) {
+        console.error('Error getting message metadata:', e);
+      }
+
+      // If we couldn't get the phone_number_id from the message, use the environment variable
+      if (!phoneNumberId) {
+        phoneNumberId = Deno.env.get('WHATSAPP_PHONE_ID') || '';
+        console.log('Using default WHATSAPP_PHONE_ID for escalation ticket:', phoneNumberId);
+      }
+
+      // Get the actual user_id associated with this phone ID for proper isolation
+      const { data: platformSecret, error: secretError } = await supabase
+        .from('platform_secrets')
+        .select('user_id')
+        .eq('whatsapp_phone_id', phoneNumberId)
+        .maybeSingle();
+
+      if (secretError) {
+        console.error('Error fetching user_id from platform_secrets:', secretError);
+        return null;
+      }
+
+      const authenticatedUserId = platformSecret?.user_id;
+      console.log('Authenticated user ID for this platform:', authenticatedUserId);
+
+      if (!authenticatedUserId) {
+        console.error('No user_id found for this WhatsApp phone ID');
         return null;
       }
       
       const ticketData = {
-        user_id: userId,
+        user_id: authenticatedUserId,
         title: `Support Request: ${context.messageContent.substring(0, 50)}...`,
         customer_name: context.userName,
         platform: context.platform,
@@ -139,7 +184,7 @@ export class TicketHandler {
         priority: this.getPriorityFromResponse(parsedResponse),
         body: context.messageContent,
         conversation_id: context.conversationId,
-        whatsapp_message_id: context.whatsappMessageId,
+        whatsapp_message_id: context.messageId,
         escalation_reason: parsedResponse.escalation_reason || 'Requires human assistance',
         intent_type: parsedResponse.intent
       };
