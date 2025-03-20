@@ -35,7 +35,7 @@ export class OrderProcessor {
     // Get the pending order from conversation_contexts
     const { data: pendingOrder, error } = await supabase
       .from('conversation_contexts')
-      .select('context')
+      .select('context_data') // Changed from 'context' to 'context_data' to match the database column name
       .eq('conversation_id', context.userId)
       .eq('context_type', 'pending_order')
       .maybeSingle();
@@ -46,7 +46,8 @@ export class OrderProcessor {
     }
 
     try {
-      const orderInfo: PendingOrder = JSON.parse(pendingOrder.context);
+      // Parse the order info from context_data instead of context
+      const orderInfo: PendingOrder = JSON.parse(pendingOrder.context_data);
       console.log('Found pending order:', orderInfo);
 
       // Update order state to PROCESSING
@@ -113,7 +114,7 @@ export class OrderProcessor {
       await supabase
         .from('conversation_contexts')
         .update({
-          context: JSON.stringify(updatedOrderInfo)
+          context_data: JSON.stringify(updatedOrderInfo) // Changed from 'context' to 'context_data'
         })
         .eq('conversation_id', context.userId)
         .eq('context_type', 'pending_order');
@@ -184,7 +185,7 @@ export class OrderProcessor {
       .insert({
         conversation_id: userId,
         context_type: 'pending_order',
-        context: JSON.stringify({
+        context_data: JSON.stringify({ // Changed from 'context' to 'context_data'
           product: orderInfo.product,
           quantity: orderInfo.quantity,
           state: 'CONFIRMING',
