@@ -133,9 +133,10 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
     }
 
     // Check if this is an order confirmation message - This is handled directly without LLM
+    // FIX: Use conversationId instead of contactNumber as the userId parameter
     const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
       messageId: savedMessage.id,
-      userId: contactNumber, // This is actually the conversation identifier
+      userId: conversationId, // Changed from contactNumber to conversationId - this is the key fix
       userName: contactName,
       whatsappMessageId: message.id,
       userMessage: extractMessageContent(message)
