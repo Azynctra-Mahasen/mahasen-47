@@ -89,6 +89,15 @@ export class TicketHandler {
         };
       }
 
+      if (!ticket) {
+        const error = new Error('No ticket data returned after creation');
+        console.error("Error:", error);
+        return { 
+          success: false, 
+          error: "No ticket data returned after creation" 
+        };
+      }
+
       console.log("Successfully created ticket:", ticket);
       return { 
         success: true, 

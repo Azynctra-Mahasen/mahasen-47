@@ -86,24 +86,18 @@ export class OrderProcessor {
         .eq('whatsapp_phone_id', phoneNumberId)
         .maybeSingle();
 
-      if (secretError) {
-        console.error('Error fetching user_id from platform_secrets:', secretError);
+      if (secretError || !platformSecret?.user_id) {
+        console.error('Error fetching user_id from platform_secrets:', secretError || 'No user_id found');
+        
+        // Use a default token if we can't get the platform secret
+        const whatsappToken = platformSecret?.whatsapp_access_token || Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+        const whatsappPhoneId = platformSecret?.whatsapp_phone_id || phoneNumberId;
+        
         await sendWhatsAppMessage(
           context.userId,
           "Order failed. Please retry with correct Product & Quantity in a bit.",
-          phoneNumberId,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
-        );
-        return true;
-      }
-
-      if (!platformSecret?.user_id) {
-        console.error('No user_id found for this WhatsApp phone ID:', phoneNumberId);
-        await sendWhatsAppMessage(
-          context.userId,
-          "Order failed. Please retry with correct Product & Quantity in a bit.",
-          phoneNumberId,
-          Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+          whatsappPhoneId,
+          whatsappToken
         );
         return true;
       }
@@ -130,7 +124,7 @@ export class OrderProcessor {
 
       console.log('Ticket creation response:', ticketResponse);
 
-      if (ticketResponse.success) {
+      if (ticketResponse.success && ticketResponse.ticketId) {
         // Delete the pending order after successful ticket creation
         await supabase
           .from('conversation_contexts')
@@ -145,9 +139,13 @@ export class OrderProcessor {
           platformSecret.whatsapp_phone_id,
           platformSecret.whatsapp_access_token
         );
+        
+        // Log the successful order
+        console.log(`Order successfully placed - Ticket ID: ${ticketResponse.ticketId}`);
         return true;
       } else {
         console.error('Ticket creation failed:', ticketResponse.error);
+        
         // Send order failure message
         await sendWhatsAppMessage(
           context.userId,
@@ -159,11 +157,16 @@ export class OrderProcessor {
       }
     } catch (parseError) {
       console.error('Error parsing pending order:', parseError);
+      
+      // Get fallback credentials if needed
+      const whatsappToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+      const whatsappPhoneId = Deno.env.get('WHATSAPP_PHONE_ID')!;
+      
       await sendWhatsAppMessage(
         context.userId,
         "Order failed. There was an error processing your order. Please try again.",
-        Deno.env.get('WHATSAPP_PHONE_ID')!,
-        Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+        whatsappPhoneId,
+        whatsappToken
       );
       return true;
     }

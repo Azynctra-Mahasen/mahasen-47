@@ -1,4 +1,3 @@
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 import { UserContext } from './auth-handler.ts';
 import { generateAIResponse } from './ollama.ts';
@@ -133,10 +132,9 @@ async function handleMessage(message: any, value: any, userContext: UserContext)
     }
 
     // Check if this is an order confirmation message - This is handled directly without LLM
-    // FIX: Use conversationId instead of contactNumber as the userId parameter
     const isOrderConfirmation = await OrderProcessor.handlePendingOrderConfirmation({
       messageId: savedMessage.id,
-      userId: conversationId, // Changed from contactNumber to conversationId - this is the key fix
+      userId: conversationId, // Using conversationId as the userId parameter
       userName: contactName,
       whatsappMessageId: message.id,
       userMessage: extractMessageContent(message)
