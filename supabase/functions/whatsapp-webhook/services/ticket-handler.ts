@@ -55,6 +55,7 @@ export class TicketHandler {
       }
       
       // Create ticket data object with proper user_id field
+      // DO NOT include the id field as it's an identity column that will auto-generate
       const ticketData = {
         user_id: userId,
         title: `Order for ${productName}`,
